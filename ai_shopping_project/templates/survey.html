@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>实验问卷</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+<div class="container mt-5">
+    <div class="card">
+        <div class="card-body">
+            <h3 class="card-title">实验问卷（请认真作答，所有题目必填）</h3>
+            <form id="survey-form">
+                <!-- 示例：14道题（可根据实际量表替换） -->
+                <div class="mb-3">
+                    <label>1. 我信任这个AI导购的推荐（1=完全不同意，5=完全同意）</label>
+                    <select class="form-select" name="q1" required><option value="">请选择</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
+                </div>
+                <!-- 重复添加剩余13题，name="q2" 到 "q14" -->
+                <!-- ...（此处省略，可复制粘贴）... -->
+
+                <button type="submit" class="btn btn-success btn-lg">提交问卷</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.getElementById('survey-form').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const formData = new FormData(this);
+        const data = Object.fromEntries(formData);
+
+        // 简单必填验证
+        if (Object.values(data).some(v => !v)) {
+            alert('请完成所有题目！');
+            return;
+        }
+
+        await fetch('/api/submit_survey', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+
+        window.location.href = "/end";
+    });
+</script>
+</body>
+</html>
