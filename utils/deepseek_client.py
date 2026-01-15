@@ -5,8 +5,12 @@ from openai._exceptions import OpenAIError
 try:
     from openai._exceptions import Timeout
 except ImportError:
-    from openai._exceptions import timeout as Timeout
-# 可选：本地开发时加载.env文件，Render 部署无需此依赖（用平台环境变量）
+    try:
+        from openai._exceptions import timeout as Timeout 
+    except ImportError:
+        Timeout = OpenAIError  # 极端兜底，用通用异常
+
+#本地开发时加载.env文件，Render 部署无需此依赖（用平台环境变量）
 try:
     from dotenv import load_dotenv
     load_dotenv()  # 本地开发加载.env，Render 会自动忽略
@@ -102,5 +106,6 @@ def call_deepseek_with_products(user_msg: str, user_intent: str, recommended_pro
         print(f"DeepSeek API调用失败：{str(e)}")
 
         return f"抱歉，我暂时无法为你推荐耳机，请稍后再试。"
+
 
 
