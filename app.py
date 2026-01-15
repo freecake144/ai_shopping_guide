@@ -15,6 +15,7 @@ app = Flask(
     static_folder='static',  # 你的 static 文件夹在项目根目录下
     static_url_path='/static'  # 前端访问静态文件的前缀（必须和前端src一致）
 )
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 # 配置数据库路径
 basedir = os.path.abspath(os.path.dirname(__file__))
 DB_PATH = os.environ.get('DATABASE_PATH', os.path.join(BASE_DIR, 'data', 'experiment.db'))
@@ -269,6 +270,7 @@ def end_experiment():
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
+
 
 
 
