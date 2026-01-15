@@ -24,22 +24,33 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# 初始化DeepSeek客户端（适配Render环境变量）
+# 初始化DeepSeek客户端（显式配置HTTP客户端，避免proxies冲突）
 def init_deepseek_client():
-    """初始化DeepSeek客户端，增加环境变量校验"""
     api_key = os.environ.get('DEEPSEEK_API_KEY')
     if not api_key:
-        logger.error("Render 环境中未配置 DEEPSEEK_API_KEY 环境变量！")
-        raise ValueError("请在 Render 控制台配置 DEEPSEEK_API_KEY 环境变量")
+        logger.error("❌ 未配置 DEEPSEEK_API_KEY 环境变量！")
+        raise ValueError("请在Render控制台->Environment添加DEEPSEEK_API_KEY")
     
     base_url = os.environ.get('DEEPSEEK_BASE_URL', "https://api.deepseek.com")
-    client = OpenAI(
-        api_key=api_key,
-        base_url=base_url,
-        timeout=30.0  # Render 网络超时适配，设置30秒超时
+    
+    # 显式创建httpx客户端，禁用proxies，避免底层隐式传递
+    http_client = httpx.Client(
+        timeout=30.0,  # 超时配置
+        proxies=None,  # 明确禁用代理，解决proxies参数冲突
+        follow_redirects=True
     )
-    logger.info("DeepSeek 客户端初始化成功")
-    return client
+    
+    try:
+        client = OpenAI(
+            api_key=api_key,
+            base_url=base_url,
+            http_client=http_client  # 显式传递HTTP客户端，覆盖默认逻辑
+        )
+        logger.info("✅ DeepSeek客户端初始化成功")
+        return client
+    except Exception as e:
+        logger.error(f"❌ 客户端初始化失败：{str(e)}")
+        raise
 
 # 全局客户端实例
 client = init_deepseek_client()
@@ -106,6 +117,7 @@ def call_deepseek_with_products(user_msg: str, user_intent: str, recommended_pro
         print(f"DeepSeek API调用失败：{str(e)}")
 
         return f"抱歉，我暂时无法为你推荐耳机，请稍后再试。"
+
 
 
 
