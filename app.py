@@ -17,8 +17,8 @@ app = Flask(
 )
 # 配置数据库路径
 basedir = os.path.abspath(os.path.dirname(__file__))
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(basedir, 'data', 'experiment.db')
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+DB_PATH = os.environ.get('DATABASE_PATH', os.path.join(BASE_DIR, 'data', 'experiment.db'))
+app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{DB_PATH}'
 app.secret_key = 'thesis_secret_key'  # 用于加密session
 
 db.init_app(app)
@@ -269,5 +269,6 @@ def end_experiment():
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
+
 
 
