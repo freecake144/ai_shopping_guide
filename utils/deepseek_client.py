@@ -1,5 +1,6 @@
 import os
 import logging
+import httpx
 from openai import OpenAI
 from openai._exceptions import OpenAIError
 try:
@@ -117,6 +118,7 @@ def call_deepseek_with_products(user_msg: str, user_intent: str, recommended_pro
         print(f"DeepSeek API调用失败：{str(e)}")
 
         return f"抱歉，我暂时无法为你推荐耳机，请稍后再试。"
+
 
 
 
