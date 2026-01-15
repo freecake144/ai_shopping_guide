@@ -1,11 +1,40 @@
 import os
+import logging
 from openai import OpenAI
+from openai._exceptions import OpenAIError, Timeout
+# 可选：本地开发时加载.env文件，Render 部署无需此依赖（用平台环境变量）
+try:
+    from dotenv import load_dotenv
+    load_dotenv()  # 本地开发加载.env，Render 会自动忽略
+except ImportError:
+    pass
 
-# 初始化DeepSeek客户端（遵循官方示例）
-client = OpenAI(
-    api_key=os.environ.get('DEEPSEEK_API_KEY'),  # 从环境变量获取API密钥
-    base_url="https://api.deepseek.com"  # DeepSeek的API地址
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
+logger = logging.getLogger(__name__)
+
+# 初始化DeepSeek客户端（适配Render环境变量）
+def init_deepseek_client():
+    """初始化DeepSeek客户端，增加环境变量校验"""
+    api_key = os.environ.get('DEEPSEEK_API_KEY')
+    if not api_key:
+        logger.error("Render 环境中未配置 DEEPSEEK_API_KEY 环境变量！")
+        raise ValueError("请在 Render 控制台配置 DEEPSEEK_API_KEY 环境变量")
+    
+    base_url = os.environ.get('DEEPSEEK_BASE_URL', "https://api.deepseek.com")
+    client = OpenAI(
+        api_key=api_key,
+        base_url=base_url,
+        timeout=30.0  # Render 网络超时适配，设置30秒超时
+    )
+    logger.info("DeepSeek 客户端初始化成功")
+    return client
+
+# 全局客户端实例
+client = init_deepseek_client()
 
 def call_deepseek_with_products(user_msg: str, user_intent: str, recommended_products: list, adapt_level: str, calib_level: str) -> str:
     """
@@ -67,4 +96,5 @@ def call_deepseek_with_products(user_msg: str, user_intent: str, recommended_pro
     except Exception as e:
         # 异常处理：API调用失败时返回兜底回复，避免实验中断
         print(f"DeepSeek API调用失败：{str(e)}")
+
         return f"抱歉，我暂时无法为你推荐耳机，请稍后再试。"
