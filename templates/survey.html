@@ -6,65 +6,91 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         body { background: #f8f9fa; }
-        .container { max-width: 800px; margin-top: 50px; }
-        .question { margin-bottom: 30px; }
-        .likert { display: flex; justify-content: space-between; }
+        .container { max-width: 900px; margin-top: 30px; }
+        .question { margin-bottom: 40px; padding: 20px; background: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .likert { display: flex; justify-content: space-between; flex-wrap: wrap; }
+        .likert label { flex: 1; text-align: center; min-width: 50px; }
     </style>
 </head>
 <body>
-<div class="container bg-white p-5 rounded shadow">
-    <h3 class="text-center mb-4">实验问卷（请认真作答，所有题目必填，预计2分钟）</h3>
-    <p class="text-muted text-center mb-5">请根据您刚刚与AI导购的交互体验，评价以下陈述<br>（1=完全不同意，7=完全同意）</p>
+<div class="container">
+    <h2 class="text-center mb-4">实验问卷（请认真作答，所有题目必填，约2分钟）</h2>
+    <p class="text-center text-muted mb-5">请根据您刚刚与AI导购的交互体验，评价以下陈述（1=完全不同意，7=完全同意）</p>
 
     <form id="survey-form">
         <!-- 信任 1-3 -->
         <div class="question">
-            <p>1. 我相信这个AI导购提供的信息是可靠的。</p>
+            <p><strong>1. 我相信这个AI导购提供的信息是可靠的。</strong></p>
             <div class="likert">
-                <label><input type="radio" name="q1" value="1" required>1</label>
-                <label><input type="radio" name="q1" value="2">2</label>
-                <label><input type="radio" name="q1" value="3">3</label>
-                <label><input type="radio" name="q1" value="4">4</label>
-                <label><input type="radio" name="q1" value="5">5</label>
-                <label><input type="radio" name="q1" value="6">6</label>
-                <label><input type="radio" name="q1" value="7">7</label>
+                {% for i in range(1,8) %}
+                <label><input type="radio" name="q1" value="{{i}}" required>{{i}}</label>
+                {% endfor %}
             </div>
         </div>
         <div class="question">
-            <p>2. 这个AI导购是值得信赖的。</p>
-            <div class="likert">
-                <label><input type="radio" name="q2" value="1" required>1</label>
-                <!-- ... 复制2-7 ... -->
-                <label><input type="radio" name="q2" value="7">7</label>
-            </div>
+            <p><strong>2. 这个AI导购是值得信赖的。</strong></p>
+            <div class="likert">{% for i in range(1,8) %}<label><input type="radio" name="q2" value="{{i}}" required>{{i}}</label>{% endfor %}</div>
         </div>
         <div class="question">
-            <p>3. 我觉得这个AI导购会按照我的最佳利益推荐产品。</p>
-            <div class="likert"><!-- 同上 --></div>
+            <p><strong>3. 我觉得这个AI导购会按照我的最佳利益推荐产品。</strong></p>
+            <div class="likert">{% for i in range(1,8) %}<label><input type="radio" name="q3" value="{{i}}" required>{{i}}</label>{% endfor %}</div>
         </div>
 
         <!-- 满意度 4-6 -->
-        <div class="question"><p>4. 我对这次与AI导购的交互体验感到满意。</p><div class="likert"><!-- 同上 name="q4" --></div></div>
-        <div class="question"><p>5. 这个AI导购很好地满足了我的选购需求。</p><div class="likert"><!-- name="q5" --></div></div>
-        <div class="question"><p>6. 整体而言，这次交互让我感到愉快。</p><div class="likert"><!-- name="q6" --></div></div>
+        <div class="question">
+            <p><strong>4. 我对这次与AI导购的交互体验感到满意。</strong></p>
+            <div class="likert">{% for i in range(1,8) %}<label><input type="radio" name="q4" value="{{i}}" required>{{i}}</label>{% endfor %}</div>
+        </div>
+        <div class="question">
+            <p><strong>5. 这个AI导购很好地满足了我的选购需求。</strong></p>
+            <div class="likert">{% for i in range(1,8) %}<label><input type="radio" name="q5" value="{{i}}" required>{{i}}</label>{% endfor %}</div>
+        </div>
+        <div class="question">
+            <p><strong>6. 整体而言，这次交互让我感到愉快。</strong></p>
+            <div class="likert">{% for i in range(1,8) %}<label><input type="radio" name="q6" value="{{i}}" required>{{i}}</label>{% endfor %}</div>
+        </div>
 
         <!-- 持续使用意愿 7-9 -->
-        <div class="question"><p>7. 我未来还会继续使用这个AI导购选购耳机。</p><div class="likert"><!-- name="q7" --></div></div>
-        <div class="question"><p>8. 如果有需要，我会优先选择这个AI导购。</p><div class="likert"><!-- name="q8" --></div></div>
-        <div class="question"><p>9. 我会向朋友推荐这个AI导购。</p><div class="likert"><!-- name="q9" --></div></div>
-
-        <!-- 操控检查：适应性 10-12 -->
-        <div class="question"><p>10. 这个AI导购能很好地理解并适应我的需求变化。</p><div class="likert"><!-- name="q10" --></div></div>
-        <div class="question"><p>11. AI导购在对话中会主动追问以澄清我的偏好。</p><div class="likert"><!-- name="q11" --></div></div>
-        <div class="question"><p>12. AI导购的回复风格让我感到个性化。</p><div class="likert"><!-- name="q12" --></div></div>
-
-        <!-- 操控检查：校准 13-14 -->
-        <div class="question"><p>13. AI导购推荐的耳机与我的需求高度匹配。</p><div class="likert"><!-- name="q13" --></div></div>
-        <div class="question"><p>14. AI推荐的产品准确反映了我表达的偏好（如预算、功能）。</p><div class="likert"><!-- name="q14" --></div></div>
-
-        <!-- 人口统计（非Likert） -->
         <div class="question">
-            <p>您的性别：</p>
+            <p><strong>7. 我未来还会继续使用这个AI导购选购耳机。</strong></p>
+            <div class="likert">{% for i in range(1,8) %}<label><input type="radio" name="q7" value="{{i}}" required>{{i}}</label>{% endfor %}</div>
+        </div>
+        <div class="question">
+            <p><strong>8. 如果有需要，我会优先选择这个AI导购。</strong></p>
+            <div class="likert">{% for i in range(1,8) %}<label><input type="radio" name="q8" value="{{i}}" required>{{i}}</label>{% endfor %}</div>
+        </div>
+        <div class="question">
+            <p><strong>9. 我会向朋友推荐这个AI导购。</strong></p>
+            <div class="likert">{% for i in range(1,8) %}<label><input type="radio" name="q9" value="{{i}}" required>{{i}}</label>{% endfor %}</div>
+        </div>
+
+        <!-- 适应性操控检查 10-12 -->
+        <div class="question">
+            <p><strong>10. 这个AI导购能很好地理解并适应我的需求变化。</strong></p>
+            <div class="likert">{% for i in range(1,8) %}<label><input type="radio" name="q10" value="{{i}}" required>{{i}}</label>{% endfor %}</div>
+        </div>
+        <div class="question">
+            <p><strong>11. AI导购在对话中会主动追问以澄清我的偏好。</strong></p>
+            <div class="likert">{% for i in range(1,8) %}<label><input type="radio" name="q11" value="{{i}}" required>{{i}}</label>{% endfor %}</div>
+        </div>
+        <div class="question">
+            <p><strong>12. AI导购的回复风格让我感到个性化。</strong></p>
+            <div class="likert">{% for i in range(1,8) %}<label><input type="radio" name="q12" value="{{i}}" required>{{i}}</label>{% endfor %}</div>
+        </div>
+
+        <!-- 校准操控检查 13-14 -->
+        <div class="question">
+            <p><strong>13. AI导购推荐的耳机与我的需求高度匹配。</strong></p>
+            <div class="likert">{% for i in range(1,8) %}<label><input type="radio" name="q13" value="{{i}}" required>{{i}}</label>{% endfor %}</div>
+        </div>
+        <div class="question">
+            <p><strong>14. AI推荐的产品准确反映了我表达的偏好（如预算、功能）。</strong></p>
+            <div class="likert">{% for i in range(1,8) %}<label><input type="radio" name="q14" value="{{i}}" required>{{i}}</label>{% endfor %}</div>
+        </div>
+
+        <!-- 人口统计 -->
+        <div class="question">
+            <p><strong>您的性别：</strong></p>
             <select name="gender" class="form-select" required>
                 <option value="">请选择</option>
                 <option value="male">男</option>
@@ -74,7 +100,7 @@
             </select>
         </div>
         <div class="question">
-            <p>您的年龄段：</p>
+            <p><strong>您的年龄段：</strong></p>
             <select name="age" class="form-select" required>
                 <option value="">请选择</option>
                 <option value="under18">18岁以下</option>
@@ -85,7 +111,7 @@
             </select>
         </div>
         <div class="question">
-            <p>您过去一年购买耳机的次数：</p>
+            <p><strong>您过去一年购买耳机的次数：</strong></p>
             <select name="experience" class="form-select" required>
                 <option value="">请选择</option>
                 <option value="0">0次</option>
@@ -105,22 +131,30 @@
     document.getElementById('survey-form').addEventListener('submit', async function(e) {
         e.preventDefault();
         const formData = new FormData(this);
-        const data = Object.fromEntries(formData);
+        const data = {};
+        for (let [key, value] of formData.entries()) {
+            data[key] = value;
+        }
 
-        // 简单验证（所有radio/select必填）
-        if (Object.values(data).some(v => !v)) {
+        // 必填验证
+        const required = ['q1','q2','q3','q4','q5','q6','q7','q8','q9','q10','q11','q12','q13','q14','gender','age','experience'];
+        if (required.some(k => !data[k])) {
             alert('请完成所有题目！');
             return;
         }
 
-        await fetch('/api/submit_survey', {
+        const response = await fetch('/api/submit_survey', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(data)
         });
 
-        alert('提交成功！感谢参与～');
-        window.location.href = "/end";  // 跳转感谢页
+        if (response.ok) {
+            alert('提交成功！感谢您的参与～');
+            window.location.href = "/end";  // 跳转感谢页
+        } else {
+            alert('提交失败，请重试');
+        }
     });
 </script>
 </body>
