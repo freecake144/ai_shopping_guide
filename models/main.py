@@ -68,4 +68,28 @@ class Product(db.Model):
     scenario = db.Column(db.String(20))  # 使用场景（通勤/游戏）
     created_at = db.Column(db.DateTime, default=datetime.utcnow)  # 入库时间
 
+class Survey(db.Model):
+    __tablename__ = 'surveys'
+    id = db.Column(db.Integer, primary_key=True)
+    session_uuid = db.Column(db.String(64), db.ForeignKey('experiment_session.session_uuid'), unique=True)  # 一会话一问卷
+    trust1 = db.Column(db.Integer)  # 信任题1
+    trust2 = db.Column(db.Integer)
+    trust3 = db.Column(db.Integer)
+    satisfaction1 = db.Column(db.Integer)  # 满意度题1
+    satisfaction2 = db.Column(db.Integer)
+    satisfaction3 = db.Column(db.Integer)
+    continuance1 = db.Column(db.Integer)  # 持续使用题1
+    continuance2 = db.Column(db.Integer)
+    continuance3 = db.Column(db.Integer)
+    adaptivity1 = db.Column(db.Integer)  # 适应性操控检查题1
+    adaptivity2 = db.Column(db.Integer)
+    adaptivity3 = db.Column(db.Integer)
+    calibration1 = db.Column(db.Integer)  # 校准操控检查题1
+    calibration2 = db.Column(db.Integer)
+    gender = db.Column(db.String(20))
+    age = db.Column(db.String(20))
+    experience = db.Column(db.String(20))
+    submitted_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
 
