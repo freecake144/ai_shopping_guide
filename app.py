@@ -256,22 +256,23 @@ def api_send():
 @app.route('/end')
 def end_experiment():
     session_uuid = session.get('session_uuid')
-
     if session_uuid:
-        exp_session = ExperimentSession.query.filter_by(
-            session_uuid=session_uuid
-        ).first()
-
+        exp_session = ExperimentSession.query.filter_by(session_uuid=session_uuid).first()
         if exp_session:
             exp_session.end_time = datetime.utcnow()
             db.session.commit()
 
-    # 清理浏览器 session（防止重复）
-    session.clear()
-    return render_template('end.html')
+    # 生成问卷星链接
+    wjx_id = "347593710"
+    survey_url = f"https://www.wjx.cn/vm/{347593710}.aspx?session_id={session_uuid or 'unknown'}"
 
+    # 清理session
+    session.clear()
+
+    return render_template('end.html', survey_url=survey_url)
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
+
 
 
 
