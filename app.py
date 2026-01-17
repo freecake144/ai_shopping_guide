@@ -17,11 +17,11 @@ app = Flask(
 )
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 # 配置数据库路径
-DB_DIR = os.environ.get('RAILWAY_VOLUME_MOUNT_PATH', os.path.join(BASE_DIR, 'data'))
+DB_DIR = os.environ.get('RENDER_DISK_MOUNT_PATH', os.path.join(BASE_DIR, 'data'))
 os.makedirs(DB_DIR, exist_ok=True)  # 确保目录存在
 DB_PATH = os.path.join(DB_DIR, 'experiment.db')
 app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{DB_PATH}'
-app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{DB_PATH}'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.secret_key = 'thesis_secret_key'  # 用于加密session
 
 db.init_app(app)
@@ -272,6 +272,7 @@ def end_experiment():
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
+
 
 
 
