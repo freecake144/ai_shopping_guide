@@ -253,6 +253,48 @@ def api_send():
     # J. 返回结果给前端
     return jsonify({'response': ai_text, 'products':frontend_products})
 
+@app.route('/survey')
+def survey():
+    # 标记会话结束（可选，从聊天跳来时记录）
+    session_uuid = session.get('session_uuid')
+    if session_uuid:
+        exp_session = ExperimentSession.query.filter_by(session_uuid=session_uuid).first()
+        if exp_session:
+            exp_session.end_time = datetime.utcnow()
+            db.session.commit()
+    return render_template('survey.html')
+
+@app.route('/api/submit_survey', methods=['POST'])
+def submit_survey():
+    data = request.json
+    session_uuid = session.get('session_uuid', 'unknown')
+    
+    survey = Survey(
+        session_uuid=session_uuid,
+        trust1=int(data.get('q1')),
+        trust2=int(data.get('q2')),
+        trust3=int(data.get('q3')),
+        satisfaction1=int(data.get('q4')),
+        satisfaction2=int(data.get('q5')),
+        satisfaction3=int(data.get('q6')),
+        continuance1=int(data.get('q7')),
+        continuance2=int(data.get('q8')),
+        continuance3=int(data.get('q9')),
+        adaptivity1=int(data.get('q10')),
+        adaptivity2=int(data.get('q11')),
+        adaptivity3=int(data.get('q12')),
+        calibration1=int(data.get('q13')),
+        calibration2=int(data.get('q14')),
+        gender=data.get('gender'),
+        age=data.get('age'),
+        experience=data.get('experience')
+    )
+    db.session.add(survey)
+    db.session.commit()
+    
+    session.clear()  # 清理
+    return jsonify({"status": "success"})
+
 @app.route('/end')
 def end_experiment():
     session_uuid = session.get('session_uuid')
@@ -272,6 +314,7 @@ def end_experiment():
     return render_template('end.html', survey_url=survey_url)
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
+
 
 
 
