@@ -24,32 +24,30 @@ def assign_group():
     return random.choice(['A', 'B', 'C', 'D'])
 
 def get_ai_response(
-    user_msg: str,
-    group_id: str,
-    current_turn: int,
-    assigned_adaptivity: str,
-    assigned_calibration: str,
-    previous_recommended_products: list = []
+        user_msg: str,
+        group_id: str,
+        current_turn: int,
+        assigned_adaptivity: str,
+        assigned_calibration: str,
+        previous_recommended_products: list = []
 ) -> Tuple[str, str, str, List[Dict]]:
     adapt_level = assigned_adaptivity
     calib_level = assigned_calibration
 
-    # 实时加载所有商品
+    # 1. 加载商品 (保持不变)
     all_products = load_products_from_csv()
     final_products = copy.deepcopy(all_products)
 
-    # 优先保留并前置历史商品（确保对比/追问时可用）
+    # 2. 处理历史商品前置 (保持不变)
     if previous_recommended_products:
         history_ids = {p['product_id'] for p in previous_recommended_products}
-        # 前置历史
         final_products = [p for p in previous_recommended_products if p['product_id'] in history_ids] + \
                          [p for p in final_products if p['product_id'] not in history_ids]
-        # 补充历史（去重）
         for prev_p in previous_recommended_products:
             if prev_p['product_id'] not in {p['product_id'] for p in final_products}:
                 final_products.append(prev_p)
 
-    # 去重
+    # 3. 去重 (保持不变)
     seen_ids = set()
     dedup_products = []
     for p in final_products:
@@ -58,47 +56,72 @@ def get_ai_response(
             seen_ids.add(p['product_id'])
     final_products = dedup_products
 
-    # 调用DeepSeek（传完整列表，让AI自主选）
+    # =======================================================
+    # 注入“协议指令”
+    # =======================================================
+    # 随着对话进行，每一轮都会提醒 AI 遵守格式，防止它“忘事”
+    protocol_instruction = (
+        "\n\n[System Instruction]: "
+        "在回复的最后，您必须明确列出产品 ID"
+        "您目前推荐的格式如下： "
+        "'||REC: [EARxxx], [EARxxx]||'。"
+        "请勿包含仅用于比较或历史背景提及的产品 ID。 "
+        "现在只列出你希望用户点击的选项。"
+    )
+
+    # 将指令拼接到用户输入中发送给 AI
+    augmented_user_msg = user_msg + protocol_instruction
+
+    # 4. 调用 AI (传入拼接后的 msg)
     ai_text = call_deepseek_with_products(
-        user_msg=user_msg,
-        user_intent="recommendation",  # 可根据 adapt_level 动态调整
+        user_msg=augmented_user_msg,
+        user_intent="recommendation",
         recommended_products=final_products,
         adapt_level=adapt_level,
         calib_level=calib_level
     )
 
-    # 从AI回复文本中提取被推荐的商品
+    # =======================================================
+    #  优先匹配“协议格式”
+    # =======================================================
     recommended_objs = []
-    # 优先使用正则匹配 ID
-    # 匹配 EAR 后跟3位数字
-    found_ids = re.findall(r"(EAR\d{3})", ai_text, re.IGNORECASE)
-    # 将找到的 ID 转为大写并去重
+    found_ids = []
+
+    # 策略 1: 尝试提取 ||REC: ... || 中的内容 (最精准，排除历史干扰)
+    strict_match = re.search(r"\|\|REC:\s*(.*?)\|\|", ai_text, re.DOTALL | re.IGNORECASE)
+    if strict_match:
+        # 提取括号里的内容，例如从 "[EAR001], [EAR002]" 中提取
+        content = strict_match.group(1)
+        found_ids = re.findall(r"(EAR\d{3})", content, re.IGNORECASE)
+
+    # 策略 2: 如果 AI 没遵守协议 (漏写了)，再回退到之前的“全文搜索”作为保底
+    if not found_ids:
+        found_ids = re.findall(r"(EAR\d{3})", ai_text, re.IGNORECASE)
+
+    # 去重并查找对象
     found_ids = list(set([fid.upper() for fid in found_ids]))
 
     if found_ids:
-        # 如果正则找到了 ID，直接通过 ID 找商品
         for pid in found_ids:
-            # 在 final_products 里找对应的商品对象
             match = next((p for p in final_products if p['product_id'] == pid), None)
             if match:
                 recommended_objs.append(match)
 
-    # 如果正则没找到 ID，尝试之前的名称模糊匹配
-    if not recommended_objs:
-        for p in final_products:
-            p_name = p.get('product_name', '').lower()
-            # 简单的名称匹配往往容易遗漏，保留作为保底
-            if p_name and p_name in ai_text.lower():
-                recommended_objs.append(p)#
-
-    # 返回核心商品（用于前端显示：AI回复中提到的，或默认前几款）
+    # 5. 最终兜底 (保持不变)
+    # 此时 recommended_objs 应该非常干净，只包含 AI 明确放在 ||REC: ... || 里的商品
     if recommended_objs:
         core_products = extract_product_core_info(recommended_objs)
     else:
-        # 兜底（AI 没点名时）
+        # 真的没找到，才显示默认6个
         core_products = extract_product_core_info(all_products[:6])
 
+    # 6. 清理 AI 回复文本 (可选)
+    # 为了用户体验，你可以把尾巴上的 ||REC: ... || 删掉，不显示给用户
+    # 如果你想保留给开发者调试看，可以注释掉下面这行
+    ai_text = re.sub(r"\|\|REC:.*?\|\|", "", ai_text, flags=re.DOTALL).strip()
+
     return ai_text, adapt_level, calib_level, core_products
+
 
 
 
