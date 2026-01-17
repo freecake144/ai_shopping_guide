@@ -3,6 +3,7 @@ import random
 from utils.product_loader import  extract_product_core_info, load_products_from_csv
 from utils.deepseek_client import call_deepseek_with_products
 from typing import Tuple, List, Dict
+import re
 
 # 定义实验条件 (2x2 设计)
 def get_experiment_condition(group_id):
@@ -68,13 +69,27 @@ def get_ai_response(
 
     # 从AI回复文本中提取被推荐的商品
     recommended_objs = []
-    for p in final_products:
-        p_name = p.get('product_name', '').lower()
-        p_id = p.get('product_id', '').lower()
-        if p_id and p_id in ai_text.lower():
-            recommended_objs.append(p)
-        elif p_name and p_name in ai_text.lower():
-            recommended_objs.append(p)
+    # 优先使用正则匹配 ID
+    # 匹配 EAR 后跟3位数字
+    found_ids = re.findall(r"(EAR\d{3})", ai_text, re.IGNORECASE)
+    # 将找到的 ID 转为大写并去重
+    found_ids = list(set([fid.upper() for fid in found_ids]))
+
+    if found_ids:
+        # 如果正则找到了 ID，直接通过 ID 找商品
+        for pid in found_ids:
+            # 在 final_products 里找对应的商品对象
+            match = next((p for p in final_products if p['product_id'] == pid), None)
+            if match:
+                recommended_objs.append(match)
+
+    # 如果正则没找到 ID，尝试之前的名称模糊匹配
+    if not recommended_objs:
+        for p in final_products:
+            p_name = p.get('product_name', '').lower()
+            # 简单的名称匹配往往容易遗漏，保留作为保底
+            if p_name and p_name in ai_text.lower():
+                recommended_objs.append(p)#
 
     # 返回核心商品（用于前端显示：AI回复中提到的，或默认前几款）
     if recommended_objs:
@@ -84,5 +99,6 @@ def get_ai_response(
         core_products = extract_product_core_info(all_products[:6])
 
     return ai_text, adapt_level, calib_level, core_products
+
 
 
