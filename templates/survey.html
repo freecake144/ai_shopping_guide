@@ -4,25 +4,101 @@
     <meta charset="UTF-8">
     <title>实验问卷</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background: #f8f9fa; }
+        .container { max-width: 800px; margin-top: 50px; }
+        .question { margin-bottom: 30px; }
+        .likert { display: flex; justify-content: space-between; }
+    </style>
 </head>
-<body class="bg-light">
-<div class="container mt-5">
-    <div class="card">
-        <div class="card-body">
-            <h3 class="card-title">实验问卷（请认真作答，所有题目必填）</h3>
-            <form id="survey-form">
-                <!-- 示例：14道题（可根据实际量表替换） -->
-                <div class="mb-3">
-                    <label>1. 我信任这个AI导购的推荐（1=完全不同意，5=完全同意）</label>
-                    <select class="form-select" name="q1" required><option value="">请选择</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
-                </div>
-                <!-- 重复添加剩余13题，name="q2" 到 "q14" -->
-                <!-- ...（此处省略，可复制粘贴）... -->
+<body>
+<div class="container bg-white p-5 rounded shadow">
+    <h3 class="text-center mb-4">实验问卷（请认真作答，所有题目必填，预计2分钟）</h3>
+    <p class="text-muted text-center mb-5">请根据您刚刚与AI导购的交互体验，评价以下陈述<br>（1=完全不同意，7=完全同意）</p>
 
-                <button type="submit" class="btn btn-success btn-lg">提交问卷</button>
-            </form>
+    <form id="survey-form">
+        <!-- 信任 1-3 -->
+        <div class="question">
+            <p>1. 我相信这个AI导购提供的信息是可靠的。</p>
+            <div class="likert">
+                <label><input type="radio" name="q1" value="1" required>1</label>
+                <label><input type="radio" name="q1" value="2">2</label>
+                <label><input type="radio" name="q1" value="3">3</label>
+                <label><input type="radio" name="q1" value="4">4</label>
+                <label><input type="radio" name="q1" value="5">5</label>
+                <label><input type="radio" name="q1" value="6">6</label>
+                <label><input type="radio" name="q1" value="7">7</label>
+            </div>
         </div>
-    </div>
+        <div class="question">
+            <p>2. 这个AI导购是值得信赖的。</p>
+            <div class="likert">
+                <label><input type="radio" name="q2" value="1" required>1</label>
+                <!-- ... 复制2-7 ... -->
+                <label><input type="radio" name="q2" value="7">7</label>
+            </div>
+        </div>
+        <div class="question">
+            <p>3. 我觉得这个AI导购会按照我的最佳利益推荐产品。</p>
+            <div class="likert"><!-- 同上 --></div>
+        </div>
+
+        <!-- 满意度 4-6 -->
+        <div class="question"><p>4. 我对这次与AI导购的交互体验感到满意。</p><div class="likert"><!-- 同上 name="q4" --></div></div>
+        <div class="question"><p>5. 这个AI导购很好地满足了我的选购需求。</p><div class="likert"><!-- name="q5" --></div></div>
+        <div class="question"><p>6. 整体而言，这次交互让我感到愉快。</p><div class="likert"><!-- name="q6" --></div></div>
+
+        <!-- 持续使用意愿 7-9 -->
+        <div class="question"><p>7. 我未来还会继续使用这个AI导购选购耳机。</p><div class="likert"><!-- name="q7" --></div></div>
+        <div class="question"><p>8. 如果有需要，我会优先选择这个AI导购。</p><div class="likert"><!-- name="q8" --></div></div>
+        <div class="question"><p>9. 我会向朋友推荐这个AI导购。</p><div class="likert"><!-- name="q9" --></div></div>
+
+        <!-- 操控检查：适应性 10-12 -->
+        <div class="question"><p>10. 这个AI导购能很好地理解并适应我的需求变化。</p><div class="likert"><!-- name="q10" --></div></div>
+        <div class="question"><p>11. AI导购在对话中会主动追问以澄清我的偏好。</p><div class="likert"><!-- name="q11" --></div></div>
+        <div class="question"><p>12. AI导购的回复风格让我感到个性化。</p><div class="likert"><!-- name="q12" --></div></div>
+
+        <!-- 操控检查：校准 13-14 -->
+        <div class="question"><p>13. AI导购推荐的耳机与我的需求高度匹配。</p><div class="likert"><!-- name="q13" --></div></div>
+        <div class="question"><p>14. AI推荐的产品准确反映了我表达的偏好（如预算、功能）。</p><div class="likert"><!-- name="q14" --></div></div>
+
+        <!-- 人口统计（非Likert） -->
+        <div class="question">
+            <p>您的性别：</p>
+            <select name="gender" class="form-select" required>
+                <option value="">请选择</option>
+                <option value="male">男</option>
+                <option value="female">女</option>
+                <option value="other">其他</option>
+                <option value="prefer_not">不愿透露</option>
+            </select>
+        </div>
+        <div class="question">
+            <p>您的年龄段：</p>
+            <select name="age" class="form-select" required>
+                <option value="">请选择</option>
+                <option value="under18">18岁以下</option>
+                <option value="18-24">18-24</option>
+                <option value="25-34">25-34</option>
+                <option value="35-44">35-44</option>
+                <option value="over45">45岁以上</option>
+            </select>
+        </div>
+        <div class="question">
+            <p>您过去一年购买耳机的次数：</p>
+            <select name="experience" class="form-select" required>
+                <option value="">请选择</option>
+                <option value="0">0次</option>
+                <option value="1">1次</option>
+                <option value="2-3">2-3次</option>
+                <option value="4+">4次以上</option>
+            </select>
+        </div>
+
+        <div class="text-center mt-5">
+            <button type="submit" class="btn btn-success btn-lg px-5">提交问卷</button>
+        </div>
+    </form>
 </div>
 
 <script>
@@ -31,7 +107,7 @@
         const formData = new FormData(this);
         const data = Object.fromEntries(formData);
 
-        // 简单必填验证
+        // 简单验证（所有radio/select必填）
         if (Object.values(data).some(v => !v)) {
             alert('请完成所有题目！');
             return;
@@ -43,7 +119,8 @@
             body: JSON.stringify(data)
         });
 
-        window.location.href = "/end";
+        alert('提交成功！感谢参与～');
+        window.location.href = "/end";  // 跳转感谢页
     });
 </script>
 </body>
