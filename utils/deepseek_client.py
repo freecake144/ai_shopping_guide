@@ -90,6 +90,7 @@ def call_deepseek_with_products(user_msg: str, user_intent: str, recommended_pro
        - 可以引用之前推荐过的商品。
     5. 回复自然口语化（用“你”“我”“呢”“哦”），必须提到商品名称、价格、核心功能。
        - 长度200-300字，自然结束，不用Markdown。
+    6. 当你推荐具体的商品时，必须在商品名称后附带其中括号包裹的 Product ID，例如：‘推荐您看看索尼XM5 [EAR001]’。不要只说商品名。
     """
 
     # 3. 构建用户提示词（融合用户消息、意图、商品列表）
@@ -118,6 +119,7 @@ def call_deepseek_with_products(user_msg: str, user_intent: str, recommended_pro
         print(f"DeepSeek API调用失败：{str(e)}")
 
         return f"抱歉，我暂时无法为你推荐耳机，请稍后再试。"
+
 
 
 
