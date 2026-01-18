@@ -15,12 +15,26 @@ app = Flask(
     static_folder='static',  # 你的 static 文件夹在项目根目录下
     static_url_path='/static'  # 前端访问静态文件的前缀（必须和前端src一致）
 )
-BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+DATABASE_URL = os.environ.get('DATABASE_URL')
 # 配置数据库路径
-DB_DIR = os.environ.get('RENDER_DISK_MOUNT_PATH', os.path.join(BASE_DIR, 'data'))
-os.makedirs(DB_DIR, exist_ok=True)  # 确保目录存在
-DB_PATH = os.path.join(DB_DIR, 'experiment.db')
-app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{DB_PATH}'
+if DATABASE_URL:
+    # Render / Production: PostgreSQL
+    if DATABASE_URL.startswith("postgres://"):
+        DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+    app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
+    print("Using Render PostgreSQL")
+
+else:
+    # Local development: SQLite
+    BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+    DB_DIR = os.path.join(BASE_DIR, 'data')
+    os.makedirs(DB_DIR, exist_ok=True)
+
+    DB_PATH = os.path.join(DB_DIR, 'experiment.db')
+    app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{DB_PATH}'
+    print("Using local SQLite")
+
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.secret_key = 'thesis_secret_key'  # 用于加密session
 
@@ -297,6 +311,7 @@ def end_experiment():
     return render_template('end.html', survey_url=survey_url)
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
+
 
 
 
