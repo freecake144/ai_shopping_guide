@@ -274,7 +274,7 @@ def submit_survey():
         return jsonify({"status": "error", "message": "Session expired"}), 400
     
     data = request.json
-    survey = Survey(
+    survey = survey(
         session_uuid=session['session_uuid'],
         # ... 映射所有q1-q14 + gender/age/experience ...
         trust1=int(data.get('q1', 0)),
@@ -297,6 +297,7 @@ def end_experiment():
     return render_template('end.html', survey_url=survey_url)
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
+
 
 
 
