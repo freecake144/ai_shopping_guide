@@ -120,7 +120,18 @@
                 <option value="4+">4次以上</option>
             </select>
         </div>
-
+        <div class="question">
+            <p><strong>您的月收入水平（人民币）：</strong></p>
+            <select name="income" class="form-select" required>
+                <option value="">请选择</option>
+                <option value="below10k">低于 2,000</option>
+                <option value="10k-20k">2,001 - 4,000</option>
+                <option value="20k-30k">4,001 - 8,000</option>
+                <option value="30k-50k">8,001 - 10,000</option>
+                <option value="above50k">10,001 以上</option>
+                <option value="prefer_not">不愿透露</option>
+            </select>
+        </div>
         <div class="text-center mt-5">
             <button type="submit" class="btn btn-success btn-lg px-5">提交问卷</button>
         </div>
@@ -137,7 +148,7 @@
         }
 
         // 必填验证
-        const required = ['q1','q2','q3','q4','q5','q6','q7','q8','q9','q10','q11','q12','q13','q14','gender','age','experience'];
+        const required = ['q1','q2','q3','q4','q5','q6','q7','q8','q9','q10','q11','q12','q13','q14','gender','age','experience','income'];
         if (required.some(k => !data[k])) {
             alert('请完成所有题目！');
             return;
@@ -159,3 +170,4 @@
 </script>
 </body>
 </html>
+
