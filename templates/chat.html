@@ -5,104 +5,57 @@
     <title>AI耳机导购交互</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        #chat-box { height: 60vh; overflow-y: auto; background: #fff; border: 1px solid #dee2e6; padding: 15px; display: flex; flex-direction: column; }
-        .user-msg { background: #e3f2fd; align-self: flex-end; margin-left: auto; }
-        .ai-msg { background: #f5f5f5; align-self: flex-start; }
-        .message { max-width: 80%; margin: 10px; padding: 10px 15px; border-radius: 15px; word-wrap: break-word; }
-
-        #products-area {
-            height: 60vh;
+        #chat-box {
+            height: 70vh;
             overflow-y: auto;
+            background: #fff;
             border: 1px solid #dee2e6;
             padding: 15px;
-            background: #fafafa;
+            display: flex;
+            flex-direction: column;
         }
-        .product-card { cursor: pointer; transition: all 0.2s; border: none; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        .product-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.15); transform: translateY(-2px); }
-        .empty-tip { text-align: center; color: #999; margin-top: 50px; }
+        .user-msg { background: #e3f2fd; align-self: flex-end; margin-left: auto; }
+        .ai-msg { background: #f5f5f5; align-self: flex-start; }
+        .message {
+            max-width: 80%;
+            margin: 10px;
+            padding: 10px 15px;
+            border-radius: 15px;
+            word-wrap: break-word;
+        }
+        .bottom-area {
+            margin-top: 20px;
+        }
     </style>
 </head>
 <body>
 <div class="container mt-4">
     <h3 class="text-center mb-4">与AI耳机导购交互</h3>
 
-    <div class="row">
-        <div class="col-md-8">
+    <div class="row justify-content-center">
+        <div class="col-md-10 col-lg-8">
+            <!-- 聊天记录区 -->
             <div id="chat-box" class="mb-3">
                 <div class="message ai-msg">您好！我是您的专属耳机导购。请问您对耳机有什么具体需求吗？比如预算多少、喜欢头戴式还是入耳式？</div>
             </div>
-            <form id="input-form">
-                <div class="input-group">
+
+            <!-- 输入区 + 结束按钮 -->
+            <div class="bottom-area">
+                <form id="input-form" class="input-group mb-3">
                     <input type="text" id="msg-input" class="form-control" placeholder="输入您的需求..." required>
                     <button class="btn btn-primary" type="submit">发送</button>
-                </div>
-            </form>
-        </div>
+                </form>
 
-        <div class="col-md-4">
-            <h5 class="mb-3">实时推荐</h5>
-            <div id="products-area">
-                <div class="empty-tip">暂无推荐商品</div>
+                <div class="text-center">
+                    <button id="end-interaction" class="btn btn-outline-danger w-100">结束交互并评估</button>
+                </div>
             </div>
-            <button id="end-interaction" class="btn btn-outline-danger w-100 mt-3">结束交互并评估</button>
         </div>
     </div>
 </div>
 
 <script>
-    // 渲染商品列表的核心函数
-    function renderProducts(products) {
-        const area = document.getElementById('products-area');
-
-        // 1. 每次调用时先清空旧内容，实现“实时更新”
-        area.innerHTML = '';
-
-        // 2. 如果当前轮次没有推荐商品，显示提示信息
-        if (!products || products.length === 0) {
-            area.innerHTML = '<div class="empty-tip">👂<br>当前对话暂无特定推荐<br><small>您可以尝试描述具体预算或用途</small></div>';
-            return;
-        }
-
-        // 3. 循环渲染新商品
-        products.forEach(product => {
-            const card = document.createElement('div');
-            card.className = "mb-3";
-
-            // 确保 product_id 存在，用于匹配图片路径
-            const pid = product.product_id || 'default';
-            const imagePath = `/static/images/products/${pid}.jpg`;
-
-            card.innerHTML = `
-            <div class="card product-card">
-                <img src="${product.image_url}"
-                     class="card-img-top p-2"
-                     style="height:150px;object-fit:contain;"
-                     onerror="this.src='https://via.placeholder.com/150?text=No+Image';">
-                <div class="card-body p-2">
-                    <h6 class="card-title">${product.product_name}</h6>
-                    <p class="card-text">
-                        <span class="text-danger">¥${product.price}</span><br>
-                        ${product.core_function}
-                    </p>
-                </div>
-            </div>
-        `;
-
-            // 添加点击记录逻辑
-            card.querySelector('.product-card').addEventListener('click', function() {
-                fetch('/api/click_product', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({product_id: pid})
-                });
-                alert(`您点击了：${product.product_name}`);
-            });
-
-            area.appendChild(card);
-        });
-    }
-
-    // 消息发送处理
+    // 消息发送处理（保持不变，只移除 renderProducts 调用）
     document.getElementById('input-form').addEventListener('submit', async function(e) {
         e.preventDefault();
         const input = document.getElementById('msg-input');
@@ -121,13 +74,8 @@
 
             const data = await response.json();
 
-            // 1. 添加 AI 文本回复
+            // 只添加 AI 文本回复（不再渲染商品）
             addMessage(data.response, 'ai');
-
-            // 2. 核心：强制调用渲染函数同步右侧区域
-            // 无论后端返回的是 data.products 还是 data.product_ids，都传入渲染
-            const productsToShow = data.products || data.product_ids || [];
-            renderProducts(productsToShow);
 
         } catch (error) {
             console.error('发送失败:', error);
@@ -144,6 +92,7 @@
         box.scrollTop = box.scrollHeight;
     }
 
+    // 结束交互按钮跳转到问卷页
     document.getElementById('end-interaction').addEventListener('click', function() {
         if (confirm('确定结束交互并进入评估环节吗？')) {
             window.location.href = "/survey";
@@ -151,5 +100,4 @@
     });
 </script>
 </body>
-
 </html>
