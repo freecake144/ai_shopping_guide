@@ -247,8 +247,7 @@ def api_send():
                 'product_name': p.get('product_name'),
                 'price': p.get('price'),
                 'headset_type': p.get('category'),
-                'core_function': p.get('core_function') or '',
-                'image_url': f'/static/images/{pid}.jpg?v={datetime.utcnow().timestamp()}'
+                'core_function': p.get('core_function') or ''
             })
 
     # J. 返回结果给前端
@@ -298,6 +297,7 @@ def end_experiment():
     return render_template('end.html', survey_url=survey_url)
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
+
 
 
 
