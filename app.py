@@ -1,6 +1,5 @@
 import json
 import random
-
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 from models.main import db,User,InteractionTurn,ExperimentSession, Survey
 from ai.logic import assign_group, get_ai_response, get_experiment_condition
@@ -210,6 +209,7 @@ def api_send():
         current_turn=current_turn_index,
         assigned_adaptivity=assigned_adapt,
         assigned_calibration=assigned_calib,
+        session_uuid=session_uuid,
         previous_recommended_products=previous_products
     )
 
@@ -297,6 +297,7 @@ def end_experiment():
     return render_template('end.html', survey_url=survey_url)
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
+
 
 
 
