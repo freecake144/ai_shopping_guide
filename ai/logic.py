@@ -44,8 +44,9 @@ def get_ai_response(
         session_uuid=session_uuid,
         sender='ai'
     ).order_by(InteractionTurn.turn_index.asc()).all()  # 按轮次排序
-
+    
     historical_products = []
+    unique_history = []
     for turn in history_turns:
         if turn.recommended_products:  # recommended_products是JSON列表
             historical_products.extend(turn.recommended_products)
@@ -99,5 +100,6 @@ def get_ai_response(
     core_products = extract_product_core_info(unique_display[:8])
 
     return ai_text, adapt_level, calib_level, core_products
+
 
 
