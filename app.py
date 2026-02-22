@@ -291,9 +291,9 @@ def submit_survey():
         adaptivity3=int(data.get('q12', 0)),
         calibration1=int(data.get('q13', 0)),
         calibration2=int(data.get('q14', 0)),
-        gender=int(data.get('gender', 0)),
-        age=int(data.get('age', 0)),
-        experience=int(data.get('experience', 0))
+        gender=data.get('gender', 0),
+        age=data.get('age', 0),
+        experience=data.get('experience', 0)
         # ... 完整映射（共14题 + 3人口统计） ...
     )
     db.session.add(survey)
@@ -313,6 +313,7 @@ def end_experiment():
     return render_template('end.html', survey_url=survey_url)
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
+
 
 
 
