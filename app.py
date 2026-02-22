@@ -278,6 +278,22 @@ def submit_survey():
         session_uuid=session['session_uuid'],
         # ... 映射所有q1-q14 + gender/age/experience ...
         trust1=int(data.get('q1', 0)),
+        trust2=int(data.get('q2', 0)),
+        trust3=int(data.get('q3', 0)),
+        satisfaction1=int(data.get('q4', 0)),
+        satisfaction2=int(data.get('q5', 0)),
+        satisfaction3=int(data.get('q6', 0)),
+        continuance1=int(data.get('q7', 0)),
+        continuance2=int(data.get('q8', 0)),
+        continuance3=int(data.get('q9', 0)),
+        adaptivity1=int(data.get('q10', 0)),
+        adaptivity2=int(data.get('q11', 0)),
+        adaptivity3=int(data.get('q12', 0)),
+        calibration1=int(data.get('q13', 0)),
+        calibration2=int(data.get('q14', 0)),
+        gender=int(data.get('gender', 0)),
+        age=int(data.get('age', 0)),
+        experience=int(data.get('experience', 0))
         # ... 完整映射（共14题 + 3人口统计） ...
     )
     db.session.add(survey)
@@ -297,6 +313,7 @@ def end_experiment():
     return render_template('end.html', survey_url=survey_url)
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
+
 
 
 
