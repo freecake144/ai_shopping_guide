@@ -31,7 +31,8 @@ def load_products_from_csv() -> List[Dict]:
             "product_name",  # 商品名称
             "price",  # 价格（用于价格敏感匹配）
             "headset_type",  # 耳机类型（头戴式/入耳式/半入耳式，核心匹配字段）
-            "core_function"  # 核心功能（降噪/无线蓝牙，核心匹配字段）
+            "core_function",  # 核心功能（降噪/无线蓝牙，核心匹配字段）
+            "involvement_level"
         ]
         missing_fields = [f for f in required_fields if f not in df.columns]
         if missing_fields:
@@ -126,16 +127,22 @@ def get_random_products(top_n: int = 3) -> List[Dict]:
     random.shuffle(products)  # 关键：打乱商品列表顺序
     return products[:top_n]
 
+# 根据涉入度过滤商品
+def filter_products_by_involvement(products: List[Dict], level: str) -> List[Dict]:
+    """过滤高/低涉入度商品"""
+    return [p for p in products if p.get('involvement_level') == level]
+
 # 提取推荐商品的核心信息（减少数据库存储冗余）
 def extract_product_core_info(products: List[Dict]) -> List[Dict]:
     """
     提取商品的核心字段（用于存入数据库，避免存储冗余数据）
     返回：仅包含核心字段的商品字典列表
     """
-    core_fields = ["product_id", "product_name", "price", "headset_type","core_function", "brand","battery_life(hours)","sales_volume"]
+    core_fields = ["product_id", "product_name", "price", "headset_type","core_function", "brand","battery_life(hours)","sales_volume","involvement_level"]
     return [
         {field: product[field] for field in core_fields if field in product}
         for product in products
     ]
+
 
 
