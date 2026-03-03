@@ -148,6 +148,7 @@ def api_send():
     focus_dim = analyzer.identify_focus(user_msg)
     drift_score = 0.0  # 默认漂移为0
     trajectory_type = 'exploration'
+    purchase_intent = current_vector.get('decision_readiness', 0.0)
 
     # 2. 获取上一轮用户发言 (用于计算对比)
     # 注意：只找 sender='user' 的最近一条
@@ -351,6 +352,7 @@ def end_experiment():
     return render_template('end.html', survey_url=survey_url)
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
+
 
 
 
