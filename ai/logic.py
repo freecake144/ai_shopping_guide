@@ -1,9 +1,10 @@
 import copy
 import random
-from utils.product_loader import extract_product_core_info, load_products_from_csv
+from utils.product_loader import extract_product_core_info, load_products_from_csv, filter_products_by_involvement
 from utils.deepseek_client import call_deepseek_with_products
 from typing import Tuple, List, Dict
-from models.main import InteractionTurn
+from models.main import InteractionTurn, ExperimentSession
+
 
 # 定义实验条件 (2x2 设计)
 def get_experiment_condition(group_id):
@@ -38,6 +39,13 @@ def get_ai_response(
 
     # 1. 实时加载所有商品作为基底
     all_products = load_products_from_csv()
+
+    # 查询session的随机涉入度（从DB）
+    exp_session = ExperimentSession.query.filter_by(session_uuid=session_uuid).first()
+    involvement = exp_session.assigned_involvement if exp_session else 'high'
+
+    # 根据涉入度过滤
+    all_products = filter_products_by_involvement(all_products, involvement)
 
     # 2. 从数据库查询该session所有历史AI推荐商品
     history_turns = InteractionTurn.query.filter_by(
