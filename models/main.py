@@ -39,6 +39,7 @@ class InteractionTurn(db.Model):
     # 推荐商品字段
     recommended_products = db.Column(JSON, nullable=True)  # 存储推荐商品的JSON数据（AI回复时才有值，用户消息为None）
     trajectory_type = db.Column(db.String(50))
+    purchase_intent_score = db.Column(db.Float, default=0.0)
 
 class ExperimentSession(db.Model):
     __tablename__ = 'experiment_session'
@@ -55,6 +56,9 @@ class ExperimentSession(db.Model):
     start_time = db.Column(db.DateTime, default=datetime.utcnow)
     end_time = db.Column(db.DateTime)
     preference_evolution_chain = db.Column(db.JSON, default=[])
+    decision_path = db.Column(db.JSON, default=[])  # 决策路径序列
+    decision_efficiency_turns = db.Column(db.Integer, default=0)  # 效率轮次
+    decision_efficiency_time = db.Column(db.Float, default=0.0)  # 效率时长 (秒)
 
 class Product(db.Model):
     __tablename__ = 'products'  # 数据库表名：products
@@ -93,6 +97,7 @@ class Survey(db.Model):
     age = db.Column(db.String(20))
     experience = db.Column(db.String(20))
     submitted_at = db.Column(db.DateTime, default=datetime.utcnow)
+
 
 
 
