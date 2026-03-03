@@ -168,6 +168,7 @@ def api_send():
 
         drift_score = analyzer.calculate_drift(current_vector, last_vector)
         trajectory_type = analyzer.identify_trajectory(current_vector, last_vector, current_turn_index)
+        purchase_intent = current_vector.get('decision_readiness', 0.0)  # 意愿分数
 
     # ===============================================================
     # E. 存储 USER 发言 (包含偏好数据)
@@ -184,6 +185,7 @@ def api_send():
         preference_drift=drift_score,
         focus_dimension=focus_dim,
         trajectory_type=trajectory_type,
+        purchase_intent_score=purchase_intent,
 
         # AI 的字段留空
         ai_adaptability_level=None,
@@ -192,16 +194,27 @@ def api_send():
     db.session.add(user_turn)
     db.session.commit()  # 立即提交，防止后续出错导致用户输入丢失
     exp_session = ExperimentSession.query.filter_by(session_uuid=session_uuid).first()
-    if exp_session:
-        if not exp_session.preference_evolution_chain:
-            exp_session.preference_evolution_chain = []
-        exp_session.preference_evolution_chain.append({
-            'turn': current_turn_index,
-            'vector': current_vector,
-            'drift': drift_score,
-            'trajectory': trajectory_type
-        })
-        db.session.commit()
+if exp_session:
+    # 偏好演化链条
+    if not exp_session.preference_evolution_chain:
+        exp_session.preference_evolution_chain = []
+    exp_session.preference_evolution_chain.append({
+        'turn': current_turn_index,
+        'vector': current_vector,
+        'drift': drift_score,
+        'trajectory': trajectory_type
+    })
+
+    # 决策路径序列
+    previous_path = exp_session.decision_path or []
+    current_readiness = current_vector['decision_readiness']
+    exp_session.decision_path = analyzer.track_decision_path(current_readiness, previous_path)
+
+    # 如果检测到决策完成，记录效率轮次
+    if any(k in user_msg.lower() for k in analyzer.decision_keywords):
+        exp_session.decision_efficiency_turns = current_turn_index
+
+    db.session.commit()
 
     # ===============================================================
     # F. 调用 AI 逻辑 (Experiment Manipulation)
@@ -277,9 +290,11 @@ def survey():
         return redirect(url_for('index'))
     
     # 标记交互结束时间
-    exp_session = ExperimentSession.query.filter_by(session_uuid=session['session_uuid']).first()
     if exp_session:
         exp_session.end_time = datetime.utcnow()
+        # 计算总时长效率
+        if exp_session.start_time and exp_session.end_time:
+            exp_session.decision_efficiency_time = (exp_session.end_time - exp_session.start_time).total_seconds()
         db.session.commit()
     
     return render_template('survey.html')
@@ -330,6 +345,7 @@ def end_experiment():
     return render_template('end.html', survey_url=survey_url)
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
+
 
 
 
