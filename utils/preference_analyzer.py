@@ -48,6 +48,28 @@ class PreferenceAnalyzer:
 
         return max(min(score, 1.0), -1.0)
 
+    def identify_trajectory(self, current_vec: dict, last_vec: dict, turn_index: int) -> str:
+        """识别偏好演化轨迹类型（用于中介分析）
+        - 目标驱动型: drift低 + readiness快速上升（快速锁定需求）
+        - 信息验证型: drift中 + 焦点多次变化（探索验证，如从price到function）
+        - 探索型: drift高 + readiness低（偏好频繁变动）
+        - 默认: 'uncertain'
+        """
+        if not last_vec:
+            return 'exploration'  # 第一轮默认探索
+
+        drift = self.calculate_drift(current_vec, last_vec)
+        readiness_delta = current_vec['decision_readiness'] - last_vec.get('decision_readiness', 0)
+        current_focus = self.identify_focus(current_vec.get('text', ''))  # 假设compute_vector时传text，或从vec推断
+
+        if drift < 0.3 and readiness_delta > 0.4:
+            return 'target_driven'  # 目标驱动: 稳定 + 快速决策
+        elif 0.3 <= drift <= 0.7 and turn_index > 2:  # 多轮后焦点变化
+            return 'info_validation'  # 信息验证: 中等变化 + 多轮
+        elif drift > 0.7:
+            return 'exploratory'  # 探索: 剧烈变动
+        return 'uncertain'  # 默认
+
     def _calculate_specificity(self, text: str) -> float:
         """明确度: 0(模糊) ~ 1(高度明确，提及多个具体属性)"""
         lower_text = text.lower()
@@ -126,4 +148,5 @@ class PreferenceAnalyzer:
             return 'type'
         if any(s in lower_text for s in self.scenarios):
             return 'scenario'
+
         return 'exploration'
