@@ -195,28 +195,27 @@ def api_send():
     db.session.commit()  # 立即提交，防止后续出错导致用户输入丢失
     exp_session = ExperimentSession.query.filter_by(session_uuid=session_uuid).first()
     if exp_session:
-    # 偏好演化链条
-    if exp_session.preference_evolution_chain is None:
-        exp_session.preference_evolution_chain = []
-    exp_session.preference_evolution_chain.append({
-        'turn': current_turn_index,
-        'vector': current_vector,
-        'drift': drift_score,
-        'trajectory': trajectory_type
-    })
-
-    # 决策路径序列
-    if exp_session.decision_path is None:
-        exp_session.decision_path = []
-    previous_path = exp_session.decision_path
-    current_readiness = current_vector.get('decision_readiness', 0.0)
-    exp_session.decision_path = analyzer.track_decision_path(current_readiness, previous_path)
-
-    # 如果用户说出决策关键词，记录效率轮次
-    if any(k in user_msg.lower() for k in analyzer.decision_keywords):
-        exp_session.decision_efficiency_turns = current_turn_index
-
-    db.session.commit()   # 统一提交一次
+        # 偏好演化链条
+        if exp_session.preference_evolution_chain is None:
+            exp_session.preference_evolution_chain = []
+        new_chain = list(exp_session.preference_evolution_chain)
+        new_chain.append({
+            'turn': current_turn_index,
+            'vector': current_vector,
+            'drift': drift_score,
+            'trajectory': trajectory_type
+        })
+        exp_session.preference_evolution_chain = new_chain
+        # 决策路径序列
+        if exp_session.decision_path is None:
+            exp_session.decision_path = []
+        previous_path = exp_session.decision_path
+        current_readiness = current_vector.get('decision_readiness', 0.0)
+        exp_session.decision_path = analyzer.track_decision_path(current_readiness, previous_path)
+        # 如果用户说出决策关键词，记录效率轮次
+        if any(k in user_msg.lower() for k in analyzer.decision_keywords):
+            exp_session.decision_efficiency_turns = current_turn_index
+        db.session.commit()   # 统一提交一次
 
     # ===============================================================
     # F. 调用 AI 逻辑 (Experiment Manipulation)
@@ -352,6 +351,7 @@ def end_experiment():
     return render_template('end.html', survey_url=survey_url)
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
+
 
 
 
