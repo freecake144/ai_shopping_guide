@@ -147,6 +147,7 @@ def api_send():
     current_vector = analyzer.compute_vector(user_msg)
     focus_dim = analyzer.identify_focus(user_msg)
     drift_score = 0.0  # 默认漂移为0
+    trajectory_type = 'exploration'
 
     # 2. 获取上一轮用户发言 (用于计算对比)
     # 注意：只找 sender='user' 的最近一条
@@ -166,6 +167,7 @@ def api_send():
                 last_vector = {}
 
         drift_score = analyzer.calculate_drift(current_vector, last_vector)
+        trajectory_type = analyzer.identify_trajectory(current_vector, last_vector, current_turn_index)
 
     # ===============================================================
     # E. 存储 USER 发言 (包含偏好数据)
@@ -181,6 +183,7 @@ def api_send():
         preference_vector=current_vector,
         preference_drift=drift_score,
         focus_dimension=focus_dim,
+        trajectory_type=trajectory_type,
 
         # AI 的字段留空
         ai_adaptability_level=None,
@@ -188,6 +191,17 @@ def api_send():
     )
     db.session.add(user_turn)
     db.session.commit()  # 立即提交，防止后续出错导致用户输入丢失
+    exp_session = ExperimentSession.query.filter_by(session_uuid=session_uuid).first()
+    if exp_session:
+        if not exp_session.preference_evolution_chain:
+            exp_session.preference_evolution_chain = []
+        exp_session.preference_evolution_chain.append({
+            'turn': current_turn_index,
+            'vector': current_vector,
+            'drift': drift_score,
+            'trajectory': trajectory_type
+        })
+        db.session.commit()
 
     # ===============================================================
     # F. 调用 AI 逻辑 (Experiment Manipulation)
@@ -316,6 +330,7 @@ def end_experiment():
     return render_template('end.html', survey_url=survey_url)
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
+
 
 
 
