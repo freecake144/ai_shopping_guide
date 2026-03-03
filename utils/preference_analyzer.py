@@ -88,6 +88,11 @@ class PreferenceAnalyzer:
             return 0.3
         return 0.3  # 默认探索阶段
 
+    def track_decision_path(self, current_readiness: float, previous_path: list = []) -> list:
+        """生成决策路径序列（e.g., ['exploration', 'consideration', 'decision']）"""
+        stage = 'exploration' if current_readiness < 0.4 else 'consideration' if current_readiness < 0.8 else 'decision'
+        return previous_path + [stage]
+
     def _extract_preferred_attributes(self, text: str) -> dict:
         """提取用户偏好的具体属性（用于多维向量）"""
         lower_text = text.lower()
@@ -104,12 +109,15 @@ class PreferenceAnalyzer:
 
     def compute_vector(self, text: str) -> dict:
         """生成丰富偏好向量（适合时间序列分析和SEM）"""
-        return {
+        vec = {
             "price_preference": self._calculate_price_preference(text),  # -1 ~ 1
             "specificity": self._calculate_specificity(text),            # 0 ~ 1
+            "decision_readiness": self._calculate_decision_readiness(text),
             "decision_readiness": self._calculate_decision_readiness(text),  # 0 ~ 1
             "preferred_attributes": self._extract_preferred_attributes(text)  # 具体偏好字典
         }
+        vec['purchase_intent'] = vec['decision_readiness']
+        return vec
 
     def calculate_drift(self, current_vec: dict, last_vec: dict) -> float:
         """计算偏好漂移（综合欧氏距离 + 属性变化）"""
@@ -150,3 +158,4 @@ class PreferenceAnalyzer:
             return 'scenario'
 
         return 'exploration'
+
