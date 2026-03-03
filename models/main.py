@@ -1,6 +1,6 @@
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
-from sqlalchemy.dialects.sqlite import JSON
+from sqlalchemy import JSON
 
 db = SQLAlchemy()
 
@@ -97,6 +97,7 @@ class Survey(db.Model):
     age = db.Column(db.String(20))
     experience = db.Column(db.String(20))
     submitted_at = db.Column(db.DateTime, default=datetime.utcnow)
+
 
 
 
