@@ -194,9 +194,9 @@ def api_send():
     db.session.add(user_turn)
     db.session.commit()  # 立即提交，防止后续出错导致用户输入丢失
     exp_session = ExperimentSession.query.filter_by(session_uuid=session_uuid).first()
-if exp_session:
+    if exp_session:
     # 偏好演化链条
-    if not exp_session.preference_evolution_chain:
+    if exp_session.preference_evolution_chain is None:
         exp_session.preference_evolution_chain = []
     exp_session.preference_evolution_chain.append({
         'turn': current_turn_index,
@@ -206,15 +206,17 @@ if exp_session:
     })
 
     # 决策路径序列
-    previous_path = exp_session.decision_path or []
-    current_readiness = current_vector['decision_readiness']
+    if exp_session.decision_path is None:
+        exp_session.decision_path = []
+    previous_path = exp_session.decision_path
+    current_readiness = current_vector.get('decision_readiness', 0.0)
     exp_session.decision_path = analyzer.track_decision_path(current_readiness, previous_path)
 
-    # 如果检测到决策完成，记录效率轮次
+    # 如果用户说出决策关键词，记录效率轮次
     if any(k in user_msg.lower() for k in analyzer.decision_keywords):
         exp_session.decision_efficiency_turns = current_turn_index
 
-    db.session.commit()
+    db.session.commit()   # 统一提交一次
 
     # ===============================================================
     # F. 调用 AI 逻辑 (Experiment Manipulation)
@@ -288,13 +290,18 @@ def survey():
     """问卷页（从聊天结束跳转）"""
     if 'session_uuid' not in session:
         return redirect(url_for('index'))
-    
-    # 标记交互结束时间
+
+    # 标记交互结束时间 + 计算总时长效率
+    exp_session = ExperimentSession.query.filter_by(session_uuid=session['session_uuid']).first()
     if exp_session:
         exp_session.end_time = datetime.utcnow()
+        
         # 计算总时长效率
         if exp_session.start_time and exp_session.end_time:
-            exp_session.decision_efficiency_time = (exp_session.end_time - exp_session.start_time).total_seconds()
+            exp_session.decision_efficiency_time = (
+                exp_session.end_time - exp_session.start_time
+            ).total_seconds()
+        
         db.session.commit()
     
     return render_template('survey.html')
@@ -345,6 +352,7 @@ def end_experiment():
     return render_template('end.html', survey_url=survey_url)
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
+
 
 
 
