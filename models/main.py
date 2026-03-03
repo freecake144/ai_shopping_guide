@@ -49,6 +49,7 @@ class ExperimentSession(db.Model):
     group_id = db.Column(db.String(10)) # A/B/C/D
     assigned_adaptivity = db.Column(db.String(10)) # HIGH/LOW
     assigned_calibration = db.Column(db.String(10)) # HIGH/LOW
+    assigned_involvement = db.Column(db.String(10)) # HIGH/LOW
 
     start_time = db.Column(db.DateTime, default=datetime.utcnow)
     end_time = db.Column(db.DateTime)
@@ -90,6 +91,7 @@ class Survey(db.Model):
     age = db.Column(db.String(20))
     experience = db.Column(db.String(20))
     submitted_at = db.Column(db.DateTime, default=datetime.utcnow)
+
 
 
 
