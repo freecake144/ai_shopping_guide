@@ -60,9 +60,11 @@ def index():
     if 'session_id' not in session:
         session_uuid = str(uuid.uuid4())
         group_id = assign_group()  # A / B / C / D随机分组
+        involvement_level = random.choice(['high', 'low'])
 
         session['session_uuid'] = session_uuid
         session['group_id'] = group_id
+        session['assigned_involvement'] = involvement_level
 
         # 记录实验会话元数据
         user_uuid = session['user_uuid']
@@ -76,6 +78,7 @@ def index():
             group_id=group_id,
             assigned_adaptivity = adapt,
             assigned_calibration = calib,
+            assigned_involvement=involvement_level,
             start_time=datetime.utcnow()
         )
         db.session.add(exp_session)
@@ -313,6 +316,7 @@ def end_experiment():
     return render_template('end.html', survey_url=survey_url)
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
+
 
 
 
