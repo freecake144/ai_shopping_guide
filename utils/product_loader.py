@@ -3,6 +3,7 @@ import os
 import random
 from typing import List, Dict
 import copy
+import re
 
 # 配置商品CSV路径
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # 项目根目录
@@ -39,9 +40,9 @@ def load_products_from_csv() -> List[Dict]:
             raise ValueError(f"商品CSV缺少核心字段：{', '.join(missing_fields)}")
 
         # 处理属性字段（转为纯Python列表，避免数组类型）
-        df["core_function"] = df["core_function"].fillna("")  # 空值转为空字符串
+        df["core_function"] = df["core_function"].fillna("").astype(str)  # 空值转为空字符串
         df["core_function_list"] = df["core_function"].str.split(",").apply(
-            lambda x: [func.strip() for func in x if func.strip()]  # 移除空字符串元素
+            lambda s: [x.strip() for x in re.split(r"[，,、/]+",s) if x.strip()]  # 移除空字符串元素
         ).apply(list)  # 强制转为Python列表（避免numpy类型）
 
         # 转为字典列表（全局缓存）
@@ -143,6 +144,7 @@ def extract_product_core_info(products: List[Dict]) -> List[Dict]:
         {field: product[field] for field in core_fields if field in product}
         for product in products
     ]
+
 
 
 
