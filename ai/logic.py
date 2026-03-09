@@ -1,7 +1,7 @@
 import copy
 import random
 import re
-from typing import Tuple, List, Dict, Set
+from typing import Tuple, List, Dict, Set, Any
 
 from utils.product_loader import (
     extract_product_core_info,
@@ -26,74 +26,95 @@ def get_experiment_condition(group_id: str):
     D: HIGH adaptivity + HIGH calibration
     """
     condition_map = {
-        'A': ('LOW', 'LOW'),
-        'B': ('LOW', 'HIGH'),
-        'C': ('HIGH', 'LOW'),
-        'D': ('HIGH', 'HIGH')
+        "A": ("LOW", "LOW"),
+        "B": ("LOW", "HIGH"),
+        "C": ("HIGH", "LOW"),
+        "D": ("HIGH", "HIGH"),
     }
-    return condition_map.get(group_id, ('HIGH', 'HIGH'))
+    return condition_map.get(group_id, ("HIGH", "HIGH"))
 
 
 def assign_group():
     """随机分配实验组"""
-    return random.choice(['A', 'B', 'C', 'D'])
+    return random.choice(["A", "B", "C", "D"])
 
 
 # =========================
-# 2. 文本预处理 / 需求识别
+# 2. 基础工具
 # =========================
 def _normalize_text(text: str) -> str:
     return (text or "").strip().lower()
 
 
+def _safe_json_dict(value: Any) -> Dict:
+    if isinstance(value, dict):
+        return value
+    return {}
+
+
+def _safe_json_list(value: Any) -> List:
+    if isinstance(value, list):
+        return value
+    return []
+
+
+def _dedup_products(products: List[Dict], max_n: int = None) -> List[Dict]:
+    seen = set()
+    result = []
+    for p in products:
+        if not isinstance(p, dict):
+            continue
+        pid = p.get("product_id")
+        if not pid:
+            continue
+        if pid in seen:
+            continue
+        seen.add(pid)
+        result.append(p)
+        if max_n and len(result) >= max_n:
+            break
+    return result
+
+
+# =========================
+# 3. 从文本中抽取结构化需求
+# =========================
 def _extract_budget(text: str):
-    """
-    尝试从中文表达里提取预算上限
-    例如：
-    - 500以内
-    - 1000以下
-    - 不超过800
-    - 预算1500
-    - 1000左右
-    """
     if not text:
         return None
 
     patterns = [
-        r'(\d+)\s*元?\s*以内',
-        r'(\d+)\s*元?\s*以下',
-        r'不超过\s*(\d+)',
-        r'预算\s*(\d+)',
-        r'(\d+)\s*左右',
-        r'小于\s*(\d+)',
-        r'低于\s*(\d+)',
+        r"预算\s*(\d+)",
+        r"(\d+)\s*元?\s*以内",
+        r"(\d+)\s*元?\s*以下",
+        r"(\d+)\s*块?\s*以内",
+        r"不超过\s*(\d+)",
+        r"低于\s*(\d+)",
+        r"小于\s*(\d+)",
+        r"控制在\s*(\d+)",
+        r"(\d+)\s*左右",
     ]
-
     for pattern in patterns:
         m = re.search(pattern, text)
         if m:
             try:
                 return int(m.group(1))
             except Exception:
-                continue
-
+                pass
     return None
 
 
 def _extract_headset_type(text: str):
-    """
-    从用户文本中提取耳机类型
-    """
     if not text:
         return None
 
     mapping = {
-        "头戴": "头戴式",
         "头戴式": "头戴式",
-        "入耳": "入耳式",
+        "头戴": "头戴式",
         "入耳式": "入耳式",
-        "半入耳": "半入耳式",
+        "入耳": "入耳式",
         "半入耳式": "半入耳式",
+        "半入耳": "半入耳式",
     }
 
     for k, v in mapping.items():
@@ -102,83 +123,131 @@ def _extract_headset_type(text: str):
     return None
 
 
-def _extract_core_function(text: str):
+def _extract_core_functions(text: str) -> List[str]:
     """
-    从用户文本提取核心功能
-    这里尽量和CSV里的 core_function 值保持一致
+    这里返回列表，方便会话记忆累计多个功能点
+    注意：尽量和你的 CSV core_function 中的常用写法对齐
     """
     if not text:
-        return None
+        return []
 
-    candidates = [
+    mapping = [
         ("降噪", "降噪"),
+        ("主动降噪", "降噪"),
         ("无线", "无线蓝牙"),
         ("蓝牙", "无线蓝牙"),
         ("续航", "长续航"),
+        ("长续航", "长续航"),
         ("游戏", "游戏低延迟"),
         ("低延迟", "游戏低延迟"),
         ("音质", "高音质"),
+        ("重低音", "重低音"),
         ("通话", "高清通话"),
+        ("麦克风", "高清通话"),
         ("运动", "运动防水"),
         ("防水", "运动防水"),
+        ("舒适", "佩戴舒适"),
+        ("佩戴", "佩戴舒适"),
     ]
 
-    for keyword, normalized in candidates:
-        if keyword in text:
+    found = []
+    for keyword, normalized in mapping:
+        if keyword in text and normalized not in found:
+            found.append(normalized)
+    return found
+
+
+def _extract_brand(text: str):
+    if not text:
+        return None
+
+    brand_map = {
+        "sony": "索尼",
+        "索尼": "索尼",
+        "apple": "苹果",
+        "苹果": "苹果",
+        "huawei": "华为",
+        "华为": "华为",
+        "xiaomi": "小米",
+        "小米": "小米",
+        "edifier": "漫步者",
+        "漫步者": "漫步者",
+        "bose": "Bose",
+        "博士": "Bose",
+        "jbl": "JBL",
+        "beats": "Beats",
+        "sennheiser": "森海塞尔",
+        "森海塞尔": "森海塞尔",
+        "oppo": "OPPO",
+        "vivo": "vivo",
+    }
+
+    text_lower = text.lower()
+    for raw, normalized in brand_map.items():
+        if raw in text_lower:
             return normalized
     return None
 
 
-def _extract_brand(text: str):
-    """
-    简单品牌识别，可按你的商品库继续补
-    """
+def _extract_scenarios(text: str) -> List[str]:
     if not text:
-        return None
+        return []
 
-    brands = [
-        "索尼", "sony",
-        "苹果", "apple",
-        "华为", "huawei",
-        "小米", "xiaomi",
-        "漫步者", "edifier",
-        "bose", "博士",
-        "jbl",
-        "beats",
-        "森海塞尔", "sennheiser",
-        "oppo",
-        "vivo",
+    mapping = [
+        ("通勤", "通勤"),
+        ("地铁", "通勤"),
+        ("上班", "办公"),
+        ("办公", "办公"),
+        ("开会", "办公"),
+        ("学习", "学习"),
+        ("运动", "运动"),
+        ("跑步", "运动"),
+        ("健身", "运动"),
+        ("游戏", "游戏"),
+        ("手游", "游戏"),
+        ("打游戏", "游戏"),
+        ("睡觉", "助眠"),
+        ("日常", "日常"),
+        ("出差", "通勤"),
     ]
 
-    for brand in brands:
-        if brand.lower() in text:
-            # 返回原中文/常用形式
-            brand_map = {
-                "sony": "索尼",
-                "apple": "苹果",
-                "huawei": "华为",
-                "xiaomi": "小米",
-                "edifier": "漫步者",
-                "博士": "Bose",
-                "bose": "Bose",
-                "jbl": "JBL",
-                "beats": "Beats",
-                "sennheiser": "森海塞尔",
-                "oppo": "OPPO",
-                "vivo": "vivo",
-            }
-            return brand_map.get(brand.lower(), brand)
-    return None
+    found = []
+    for keyword, normalized in mapping:
+        if keyword in text and normalized not in found:
+            found.append(normalized)
+    return found
+
+
+def _build_intent_details(user_msg: str) -> Dict:
+    text = _normalize_text(user_msg)
+    details = {}
+
+    budget = _extract_budget(text)
+    if budget is not None:
+        details["max_price"] = budget
+
+    headset_type = _extract_headset_type(text)
+    if headset_type:
+        details["headset_type"] = headset_type
+
+    brand = _extract_brand(text)
+    if brand:
+        details["brand"] = brand
+
+    core_functions = _extract_core_functions(text)
+    if core_functions:
+        # 为兼容 product_loader.get_matching_products，这里保留一个 core_function 单值
+        details["core_function"] = core_functions[0]
+        details["core_functions"] = core_functions
+
+    scenarios = _extract_scenarios(text)
+    if scenarios:
+        details["scenarios"] = scenarios
+
+    return details
 
 
 def _detect_user_intent(user_msg: str) -> str:
-    """
-    粗粒度意图识别：
-    - price_sensitive
-    - comparison
-    - exploration
-    - recommendation
-    """
     text = _normalize_text(user_msg)
 
     if any(k in text for k in ["对比", "比较", "区别", "哪个好", "哪款好", "怎么选"]):
@@ -193,106 +262,27 @@ def _detect_user_intent(user_msg: str) -> str:
     return "recommendation"
 
 
-def _build_intent_details(user_msg: str) -> Dict:
-    """
-    提取结构化需求信息，供 HIGH calibration 使用
-    """
-    text = _normalize_text(user_msg)
-
-    details = {}
-
-    budget = _extract_budget(text)
-    if budget is not None:
-        details["max_price"] = budget
-
-    headset_type = _extract_headset_type(text)
-    if headset_type:
-        details["headset_type"] = headset_type
-
-    core_function = _extract_core_function(text)
-    if core_function:
-        details["core_function"] = core_function
-
-    brand = _extract_brand(text)
-    if brand:
-        details["brand"] = brand
-
-    return details
-
-
 # =========================
-# 3. 适应性操控（硬约束）
-# =========================
-def _need_clarification(user_msg: str, current_turn: int, intent_details: Dict) -> bool:
-    """
-    HIGH adaptivity 组在信息不足时必须追问
-    判断标准尽量简单稳定：
-    - 第一轮尤其严格
-    - 文本很短
-    - 几乎没有结构化需求
-    """
-    text = _normalize_text(user_msg)
-
-    vague_patterns = [
-        "想买耳机",
-        "推荐耳机",
-        "推荐一下",
-        "耳机推荐",
-        "买个耳机",
-        "看看耳机",
-        "有什么耳机",
-        "推荐几款耳机",
-    ]
-
-    if len(text) <= 6:
-        return True
-
-    if current_turn == 1 and len(intent_details) == 0:
-        return True
-
-    if any(p in text for p in vague_patterns) and len(intent_details) <= 1:
-        return True
-
-    return False
-
-
-def _build_clarifying_question(current_turn: int, intent_details: Dict) -> str:
-    """
-    统一追问模板，让 HIGH adaptivity 更稳定
-    """
-    if current_turn <= 1:
-        return (
-            "可以呀，我先帮你缩小一下范围。你主要是通勤、运动、游戏还是办公用呢？"
-            "另外预算大概在什么区间，你更在意降噪、音质还是续航？"
-        )
-
-    if "max_price" not in intent_details:
-        return "我再确认一下，你的预算大概是多少呢？这样我能帮你筛得更准一点。"
-
-    if "headset_type" not in intent_details:
-        return "我再确认一下，你更偏向头戴式、入耳式，还是半入耳式呢？"
-
-    if "core_function" not in intent_details:
-        return "明白了，我再确认一个重点：你更在意降噪、音质、续航、佩戴舒适度，还是通话效果呢？"
-
-    return "我再确认一下，你还有特别在意的品牌或使用场景吗？这样我可以帮你筛得更贴合。"
-
-
-# =========================
-# 4. 历史记录辅助
+# 4. 读取会话记忆
 # =========================
 def _get_session_involvement(session_uuid: str) -> str:
     exp_session = ExperimentSession.query.filter_by(session_uuid=session_uuid).first()
     if not exp_session:
         return "high"
-    # 兼容大小写
     return (exp_session.assigned_involvement or "high").lower()
 
 
 def _get_history_ai_turns(session_uuid: str):
     return InteractionTurn.query.filter_by(
         session_uuid=session_uuid,
-        sender='ai'
+        sender="ai"
+    ).order_by(InteractionTurn.turn_index.asc()).all()
+
+
+def _get_history_user_turns(session_uuid: str):
+    return InteractionTurn.query.filter_by(
+        session_uuid=session_uuid,
+        sender="user"
     ).order_by(InteractionTurn.turn_index.asc()).all()
 
 
@@ -301,33 +291,256 @@ def _get_history_product_ids(session_uuid: str) -> Set[str]:
     history_ids = set()
 
     for turn in history_turns:
-        if turn.recommended_products:
-            for p in turn.recommended_products:
-                pid = p.get("product_id")
-                if pid:
-                    history_ids.add(pid)
+        products = _safe_json_list(turn.recommended_products)
+        for p in products:
+            pid = p.get("product_id")
+            if pid:
+                history_ids.add(pid)
     return history_ids
 
 
 def _get_recent_history_products(session_uuid: str, max_n: int = 3) -> List[Dict]:
-    """
-    取最近几款历史推荐商品，必要时用于对比上下文
-    """
     history_turns = _get_history_ai_turns(session_uuid)
     collected = []
 
     for turn in reversed(history_turns):
-        if turn.recommended_products:
-            for p in turn.recommended_products:
-                if p not in collected:
-                    collected.append(p)
-                if len(collected) >= max_n:
-                    return collected[:max_n]
-    return collected[:max_n]
+        products = _safe_json_list(turn.recommended_products)
+        for p in products:
+            collected.append(p)
+
+    return _dedup_products(collected, max_n=max_n)
+
+
+def _build_user_memory_profile(session_uuid: str) -> Dict:
+    """
+    从历史用户轮次中累计“已知需求”
+    """
+    history_user_turns = _get_history_user_turns(session_uuid)
+
+    memory = {
+        "max_price": None,
+        "headset_type": None,
+        "brand": None,
+        "core_functions": [],
+        "scenarios": [],
+        "known_slots": [],
+        "last_user_need_summary": "",
+    }
+
+    for turn in history_user_turns:
+        text = _normalize_text(turn.content or "")
+        current_details = _build_intent_details(text)
+
+        if current_details.get("max_price") is not None:
+            memory["max_price"] = current_details["max_price"]
+
+        if current_details.get("headset_type"):
+            memory["headset_type"] = current_details["headset_type"]
+
+        if current_details.get("brand"):
+            memory["brand"] = current_details["brand"]
+
+        for func in current_details.get("core_functions", []):
+            if func not in memory["core_functions"]:
+                memory["core_functions"].append(func)
+
+        for s in current_details.get("scenarios", []):
+            if s not in memory["scenarios"]:
+                memory["scenarios"].append(s)
+
+        # 再利用 preference_vector 补充
+        vec = _safe_json_dict(turn.preference_vector)
+        attrs = _safe_json_dict(vec.get("preferred_attributes"))
+
+        for func in _safe_json_list(attrs.get("core_function")):
+            if func not in memory["core_functions"]:
+                memory["core_functions"].append(func)
+
+        for s in _safe_json_list(attrs.get("scenario")):
+            if s not in memory["scenarios"]:
+                memory["scenarios"].append(s)
+
+        headset_types = _safe_json_list(attrs.get("headset_type"))
+        if not memory["headset_type"] and headset_types:
+            memory["headset_type"] = headset_types[0]
+
+        brands = _safe_json_list(attrs.get("brand"))
+        if not memory["brand"] and brands:
+            memory["brand"] = brands[0]
+
+    if memory["max_price"] is not None:
+        memory["known_slots"].append("budget")
+    if memory["headset_type"]:
+        memory["known_slots"].append("headset_type")
+    if memory["brand"]:
+        memory["known_slots"].append("brand")
+    if memory["core_functions"]:
+        memory["known_slots"].append("core_function")
+    if memory["scenarios"]:
+        memory["known_slots"].append("scenario")
+
+    summary_parts = []
+    if memory["max_price"] is not None:
+        summary_parts.append(f"预算约{memory['max_price']}元")
+    if memory["headset_type"]:
+        summary_parts.append(f"偏好{memory['headset_type']}")
+    if memory["brand"]:
+        summary_parts.append(f"偏好品牌{memory['brand']}")
+    if memory["core_functions"]:
+        summary_parts.append(f"关注功能：{'、'.join(memory['core_functions'])}")
+    if memory["scenarios"]:
+        summary_parts.append(f"使用场景：{'、'.join(memory['scenarios'])}")
+
+    memory["last_user_need_summary"] = "；".join(summary_parts) if summary_parts else "暂无明确历史需求"
+
+    return memory
+
+
+def _merge_memory_with_current(memory: Dict, current_details: Dict) -> Dict:
+    merged = {
+        "max_price": current_details.get("max_price")
+        if current_details.get("max_price") is not None
+        else memory.get("max_price"),
+
+        "headset_type": current_details.get("headset_type") or memory.get("headset_type"),
+        "brand": current_details.get("brand") or memory.get("brand"),
+        "core_functions": list(memory.get("core_functions", [])),
+        "scenarios": list(memory.get("scenarios", [])),
+    }
+
+    for func in current_details.get("core_functions", []):
+        if func not in merged["core_functions"]:
+            merged["core_functions"].append(func)
+
+    for s in current_details.get("scenarios", []):
+        if s not in merged["scenarios"]:
+            merged["scenarios"].append(s)
+
+    # 为兼容旧匹配函数保留单值 core_function
+    merged["core_function"] = merged["core_functions"][0] if merged["core_functions"] else None
+
+    known_slots = []
+    if merged["max_price"] is not None:
+        known_slots.append("budget")
+    if merged["headset_type"]:
+        known_slots.append("headset_type")
+    if merged["brand"]:
+        known_slots.append("brand")
+    if merged["core_functions"]:
+        known_slots.append("core_function")
+    if merged["scenarios"]:
+        known_slots.append("scenario")
+    merged["known_slots"] = known_slots
+
+    summary_parts = []
+    if merged["max_price"] is not None:
+        summary_parts.append(f"预算约{merged['max_price']}元")
+    if merged["headset_type"]:
+        summary_parts.append(f"偏好{merged['headset_type']}")
+    if merged["brand"]:
+        summary_parts.append(f"偏好品牌{merged['brand']}")
+    if merged["core_functions"]:
+        summary_parts.append(f"关注功能：{'、'.join(merged['core_functions'])}")
+    if merged["scenarios"]:
+        summary_parts.append(f"使用场景：{'、'.join(merged['scenarios'])}")
+    merged["summary"] = "；".join(summary_parts) if summary_parts else "暂无明确需求"
+
+    return merged
 
 
 # =========================
-# 5. 商品筛选（校准操控）
+# 5. 适应性操控：只问缺失项
+# =========================
+def _need_clarification_from_memory(memory_profile: Dict, current_turn: int) -> bool:
+    missing = 0
+
+    if memory_profile.get("max_price") is None:
+        missing += 1
+    if not memory_profile.get("headset_type"):
+        missing += 1
+    if not memory_profile.get("core_functions") and not memory_profile.get("scenarios"):
+        missing += 1
+
+    # 第一轮可以更积极追问，后续轮次避免反复问
+    if current_turn <= 1:
+        return missing >= 2
+
+    return missing >= 2
+
+
+def _build_targeted_clarifying_question(memory_profile: Dict) -> str:
+    missing_budget = memory_profile.get("max_price") is None
+    missing_type = not memory_profile.get("headset_type")
+    missing_need = (not memory_profile.get("core_functions")) and (not memory_profile.get("scenarios"))
+
+    if missing_budget and missing_type:
+        return "我先确认两点，这样能帮你筛得更准：你的预算大概是多少？另外你更偏向头戴式、入耳式还是半入耳式呢？"
+
+    if missing_budget and missing_need:
+        return "我再确认一下，你的预算大概是多少？另外你主要是通勤、运动、游戏还是办公使用，或者最在意降噪、音质、续航中的哪一项呢？"
+
+    if missing_budget:
+        return "我再确认一下你的预算大概是多少呢？这样我可以帮你筛得更准一点。"
+
+    if missing_type:
+        return "我再确认一下，你更偏向头戴式、入耳式还是半入耳式呢？"
+
+    if missing_need:
+        return "我再确认一下，你主要是通勤、运动、游戏还是办公使用？或者你最在意的是降噪、音质还是续航呢？"
+
+    return ""
+
+
+# =========================
+# 6. 停止指令
+# =========================
+def _is_explicit_finish_intent(user_msg: str) -> bool:
+    text = _normalize_text(user_msg)
+    finish_keywords = [
+        "可以了", "就这样", "没问题了", "不用再推荐了", "不用推荐了",
+        "我已经决定了", "决定好了", "就买这个", "买这个", "就这个",
+        "可以结束了", "结束吧", "开始答题", "去答题", "填写问卷",
+        "我要答题", "进入问卷"
+    ]
+    return any(k in text for k in finish_keywords)
+
+
+def _is_need_clear_enough(memory_profile: Dict, current_turn: int, user_msg: str) -> bool:
+    text = _normalize_text(user_msg)
+    decision_keywords = [
+        "就买", "下单", "决定", "买这个", "就这个", "链接",
+        "直接买", "可以了", "够了", "不用再推荐"
+    ]
+
+    detail_count = 0
+    if memory_profile.get("max_price") is not None:
+        detail_count += 1
+    if memory_profile.get("headset_type"):
+        detail_count += 1
+    if memory_profile.get("brand"):
+        detail_count += 1
+    if memory_profile.get("core_functions"):
+        detail_count += 1
+    if memory_profile.get("scenarios"):
+        detail_count += 1
+
+    if detail_count >= 3:
+        return True
+    if current_turn >= 2 and detail_count >= 2:
+        return True
+    if any(k in text for k in decision_keywords):
+        return True
+
+    return False
+
+
+def _build_stop_message(memory_profile: Dict) -> str:
+    summary_text = memory_profile.get("summary") or "你的需求"
+    return f"我这边已经基本确认你的需求了：{summary_text}。目前可以先暂停推荐，你可以结束本轮交互并开始答题。"
+
+
+# =========================
+# 7. 校准操控：基于合并后的记忆选商品
 # =========================
 def _safe_filter_products_by_ids(products: List[Dict], allowed_ids: Set[str]) -> List[Dict]:
     if not allowed_ids:
@@ -337,7 +550,7 @@ def _safe_filter_products_by_ids(products: List[Dict], allowed_ids: Set[str]) ->
 
 def _exclude_history_products(products: List[Dict], history_ids: Set[str]) -> List[Dict]:
     filtered = [p for p in products if p.get("product_id") not in history_ids]
-    return filtered if filtered else products
+    return filtered if filtered else list(products)
 
 
 def _high_calibration_select(
@@ -346,11 +559,6 @@ def _high_calibration_select(
     intent_details: Dict,
     top_n: int = 5
 ) -> List[Dict]:
-    """
-    HIGH calibration：按需求匹配
-    product_loader.get_matching_products 会重新从全量CSV加载，
-    所以这里要把结果再限制回当前涉入度商品池
-    """
     matched = get_matching_products(user_intent, intent_details, top_n=top_n * 2)
 
     base_ids = {p.get("product_id") for p in base_products if p.get("product_id")}
@@ -359,7 +567,6 @@ def _high_calibration_select(
     if matched:
         return matched[:top_n]
 
-    # 兜底：如果没匹配上，退化成当前涉入度池中的随机/前几项
     fallback = copy.deepcopy(base_products)
     random.shuffle(fallback)
     return fallback[:top_n]
@@ -369,9 +576,6 @@ def _low_calibration_select(
     base_products: List[Dict],
     top_n: int = 5
 ) -> List[Dict]:
-    """
-    LOW calibration：弱匹配/随机推荐
-    """
     random_products = get_random_products(top_n=top_n * 2)
     base_ids = {p.get("product_id") for p in base_products if p.get("product_id")}
     random_products = _safe_filter_products_by_ids(random_products, base_ids)
@@ -379,7 +583,6 @@ def _low_calibration_select(
     if len(random_products) >= top_n:
         return random_products[:top_n]
 
-    # 如果随机结果不足，再从当前池补齐
     fallback_pool = copy.deepcopy(base_products)
     random.shuffle(fallback_pool)
 
@@ -397,16 +600,23 @@ def _low_calibration_select(
 
 def _select_products_by_calibration(
     all_products: List[Dict],
-    user_msg: str,
+    user_intent: str,
+    merged_profile: Dict,
     calib_level: str,
     history_product_ids: Set[str],
     top_n: int = 5
 ) -> List[Dict]:
-    user_intent = _detect_user_intent(user_msg)
-    intent_details = _build_intent_details(user_msg)
-
-    # 尽量避免一直重复推荐
     candidate_products = _exclude_history_products(all_products, history_product_ids)
+
+    intent_details = {}
+    if merged_profile.get("max_price") is not None:
+        intent_details["max_price"] = merged_profile["max_price"]
+    if merged_profile.get("headset_type"):
+        intent_details["headset_type"] = merged_profile["headset_type"]
+    if merged_profile.get("brand"):
+        intent_details["brand"] = merged_profile["brand"]
+    if merged_profile.get("core_function"):
+        intent_details["core_function"] = merged_profile["core_function"]
 
     if calib_level == "HIGH":
         selected = _high_calibration_select(
@@ -421,11 +631,11 @@ def _select_products_by_calibration(
             top_n=top_n
         )
 
-    return selected[:top_n]
+    return _dedup_products(selected, max_n=top_n)
 
 
 # =========================
-# 6. 主函数
+# 8. 主函数
 # =========================
 def get_ai_response(
     user_msg: str,
@@ -450,60 +660,54 @@ def get_ai_response(
     adapt_level = (assigned_adaptivity or "HIGH").upper()
     calib_level = (assigned_calibration or "HIGH").upper()
 
-    # 1) 读取当前session的涉入度，并过滤商品池
+    # 1) 读取涉入度，并过滤商品池
     all_products = load_products_from_csv()
     involvement = _get_session_involvement(session_uuid)
     all_products = filter_products_by_involvement(all_products, involvement)
 
-    # 2) 提前识别用户需求
+    # 2) 识别本轮意图 + 构建会话记忆
     user_intent = _detect_user_intent(user_msg)
-    intent_details = _build_intent_details(user_msg)
+    current_details = _build_intent_details(user_msg)
+    history_memory = _build_user_memory_profile(session_uuid)
+    merged_profile = _merge_memory_with_current(history_memory, current_details)
 
-    # 3) HIGH adaptivity：信息不足时，直接追问，不推荐商品
-    if adapt_level == "HIGH" and _need_clarification(user_msg, current_turn, intent_details):
-        ai_text = _build_clarifying_question(current_turn, intent_details)
+    # 3) 停止推荐判断
+    if _is_explicit_finish_intent(user_msg) or _is_need_clear_enough(merged_profile, current_turn, user_msg):
+        ai_text = _build_stop_message(merged_profile)
         return ai_text, adapt_level, calib_level, []
 
-    # 4) 获取历史推荐商品ID，避免重复
-    history_product_ids = _get_history_product_ids(session_uuid)
+    # 4) HIGH adaptivity：只问缺失项，不重复问已知信息
+    if adapt_level == "HIGH" and _need_clarification_from_memory(merged_profile, current_turn):
+        ai_text = _build_targeted_clarifying_question(merged_profile)
+        return ai_text, adapt_level, calib_level, []
 
-    # 5) 根据校准水平做硬操控选商品
+    # 5) 根据历史推荐去重，做校准型选品
+    history_product_ids = _get_history_product_ids(session_uuid)
     selected_products = _select_products_by_calibration(
         all_products=all_products,
-        user_msg=user_msg,
+        user_intent=user_intent,
+        merged_profile=merged_profile,
         calib_level=calib_level,
         history_product_ids=history_product_ids,
         top_n=5
     )
 
-    # 6) 对 comparison 类意图，允许补一点历史商品做上下文
-    # 但不要把全量历史商品都混进去
+    # comparison 场景允许带一点最近历史商品做对比上下文
     if user_intent == "comparison":
         recent_history = _get_recent_history_products(session_uuid, max_n=2)
-        merged = []
-        seen = set()
+        selected_products = _dedup_products(recent_history + selected_products, max_n=5)
 
-        for p in recent_history + selected_products:
-            pid = p.get("product_id")
-            if pid and pid not in seen:
-                merged.append(p)
-                seen.add(pid)
-
-        selected_products = merged[:5]
-
-    # 7) 只把“最终筛出的少量商品”交给模型
+    # 6) 把“结构化会话记忆”显式传给模型
     ai_text = call_deepseek_with_products(
         user_msg=user_msg,
         user_intent=user_intent,
         recommended_products=selected_products,
         adapt_level=adapt_level,
-        calib_level=calib_level
+        calib_level=calib_level,
+        memory_profile=merged_profile
     )
 
-    # 8) 提取核心字段，供前端展示和数据库存储
+    # 7) 返回给前端/数据库存储的商品精简字段
     core_products = extract_product_core_info(selected_products[:5])
 
     return ai_text, adapt_level, calib_level, core_products
-
-
-
