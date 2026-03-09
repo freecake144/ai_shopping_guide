@@ -12,6 +12,33 @@ PRODUCT_CSV_PATH = os.path.join(BASE_DIR, "data", "product_list.csv")
 # 全局变量：缓存商品数据（避免每次推荐都重新读CSV，提升性能）
 GLOBAL_PRODUCTS: List[Dict] = []
 
+def _normalize_core_function_list(value):
+    """
+    兼容三种情况：
+    1. 字符串: '降噪，蓝牙，续航'
+    2. 列表: ['降噪', '蓝牙']
+    3. 空值: NaN / None
+    """
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return []
+
+    if isinstance(value, list):
+        result = []
+        for item in value:
+            if item is None:
+                continue
+            if isinstance(item, str):
+                parts = re.split(r"[，,、/]+", item)
+                result.extend([x.strip() for x in parts if x and x.strip()])
+            else:
+                result.append(str(item).strip())
+        return [x for x in result if x]
+
+    if isinstance(value, str):
+        return [x.strip() for x in re.split(r"[，,、/]+", value) if x and x.strip()]
+
+    return [str(value).strip()] if str(value).strip() else []
+
 
 def load_products_from_csv() -> List[Dict]:
     """
@@ -41,9 +68,7 @@ def load_products_from_csv() -> List[Dict]:
 
         # 处理属性字段（转为纯Python列表，避免数组类型）
         df["core_function"] = df["core_function"].fillna("").astype(str)  # 空值转为空字符串
-        df["core_function_list"] = df["core_function"].str.split(",").apply(
-            lambda s: [x.strip() for x in re.split(r"[，,、/]+",s) if x.strip()]  # 移除空字符串元素
-        ).apply(list)  # 强制转为Python列表（避免numpy类型）
+        df["core_function_list"] = df["core_function"].apply(_normalize_core_function_list)
 
         # 转为字典列表（全局缓存）
         GLOBAL_PRODUCTS = df.to_dict("records")
@@ -144,6 +169,7 @@ def extract_product_core_info(products: List[Dict]) -> List[Dict]:
         {field: product[field] for field in core_fields if field in product}
         for product in products
     ]
+
 
 
 
