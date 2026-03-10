@@ -158,7 +158,7 @@ def call_deepseek_with_products(
 ) -> str:
     product_text = _format_product_text(recommended_products, previous_products)
     memory_text = _format_memory_text(memory_profile)
-    system_prompt = _build_system_prompt(adapt_level, calib_level
+    system_prompt = _build_system_prompt(adapt_level, calib_level)
     user_prompt = f"""当前用户消息：{user_msg}
 当前用户意图：{user_intent}
 
@@ -191,5 +191,6 @@ def call_deepseek_with_products(
     except Exception as e:
         logger.error(f"DeepSeek API 调用失败：{str(e)}")
         return "抱歉，我暂时无法继续推荐。不过你前面提到的需求我会按原条件理解，你可以稍后再试一次。"
+
 
 
