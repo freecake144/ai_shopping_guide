@@ -278,7 +278,7 @@ def api_send():
                 'product_id': pid,
                 'product_name': p.get('product_name'),
                 'price': p.get('price'),
-                'headset_type': p.get('category'),
+                'headset_type': p.get('headset_type'),
                 'core_function': p.get('core_function') or ''
             })
 
@@ -352,6 +352,7 @@ def end_experiment():
     return render_template('end.html', survey_url=survey_url)
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
+
 
 
 
