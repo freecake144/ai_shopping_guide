@@ -35,7 +35,6 @@ def get_experiment_condition(group_id: str):
 
 
 def assign_group():
-    """随机分配实验组"""
     return random.choice(["A", "B", "C", "D"])
 
 
@@ -47,37 +46,48 @@ def _normalize_text(text: str) -> str:
 
 
 def _safe_json_dict(value: Any) -> Dict:
-    if isinstance(value, dict):
-        return value
-    return {}
+    return value if isinstance(value, dict) else {}
 
 
 def _safe_json_list(value: Any) -> List:
-    if isinstance(value, list):
-        return value
-    return []
+    return value if isinstance(value, list) else []
 
 
 def _dedup_products(products: List[Dict], max_n: int = None) -> List[Dict]:
     seen = set()
     result = []
+
     for p in products:
         if not isinstance(p, dict):
             continue
         pid = p.get("product_id")
-        if not pid:
-            continue
-        if pid in seen:
+        if not pid or pid in seen:
             continue
         seen.add(pid)
         result.append(p)
         if max_n and len(result) >= max_n:
             break
+
     return result
 
 
+def _count_filled_slots(profile: Dict) -> int:
+    count = 0
+    if profile.get("max_price") is not None:
+        count += 1
+    if profile.get("headset_type"):
+        count += 1
+    if profile.get("brand"):
+        count += 1
+    if profile.get("core_functions"):
+        count += 1
+    if profile.get("scenarios"):
+        count += 1
+    return count
+
+
 # =========================
-# 3. 从文本中抽取结构化需求
+# 3. 从文本抽取结构化需求
 # =========================
 def _extract_budget(text: str):
     if not text:
@@ -124,16 +134,12 @@ def _extract_headset_type(text: str):
 
 
 def _extract_core_functions(text: str) -> List[str]:
-    """
-    这里返回列表，方便会话记忆累计多个功能点
-    注意：尽量和你的 CSV core_function 中的常用写法对齐
-    """
     if not text:
         return []
 
     mapping = [
-        ("降噪", "降噪"),
         ("主动降噪", "降噪"),
+        ("降噪", "降噪"),
         ("无线", "无线蓝牙"),
         ("蓝牙", "无线蓝牙"),
         ("续航", "长续航"),
@@ -236,7 +242,6 @@ def _build_intent_details(user_msg: str) -> Dict:
 
     core_functions = _extract_core_functions(text)
     if core_functions:
-        # 为兼容 product_loader.get_matching_products，这里保留一个 core_function 单值
         details["core_function"] = core_functions[0]
         details["core_functions"] = core_functions
 
@@ -263,7 +268,7 @@ def _detect_user_intent(user_msg: str) -> str:
 
 
 # =========================
-# 4. 读取会话记忆
+# 4. 会话历史 / 记忆
 # =========================
 def _get_session_involvement(session_uuid: str) -> str:
     exp_session = ExperimentSession.query.filter_by(session_uuid=session_uuid).first()
@@ -296,6 +301,7 @@ def _get_history_product_ids(session_uuid: str) -> Set[str]:
             pid = p.get("product_id")
             if pid:
                 history_ids.add(pid)
+
     return history_ids
 
 
@@ -311,10 +317,38 @@ def _get_recent_history_products(session_uuid: str, max_n: int = 3) -> List[Dict
     return _dedup_products(collected, max_n=max_n)
 
 
+def _count_stable_signals(session_uuid: str) -> Dict:
+    """
+    统计跨轮重复出现的偏好信号，避免一次提及就被当成稳定需求
+    """
+    history_user_turns = _get_history_user_turns(session_uuid)
+
+    counts = {
+        "budget": 0,
+        "headset_type": 0,
+        "brand": 0,
+        "core_function": 0,
+        "scenario": 0,
+    }
+
+    for turn in history_user_turns:
+        details = _build_intent_details(_normalize_text(turn.content or ""))
+
+        if details.get("max_price") is not None:
+            counts["budget"] += 1
+        if details.get("headset_type"):
+            counts["headset_type"] += 1
+        if details.get("brand"):
+            counts["brand"] += 1
+        if details.get("core_functions"):
+            counts["core_function"] += 1
+        if details.get("scenarios"):
+            counts["scenario"] += 1
+
+    return counts
+
+
 def _build_user_memory_profile(session_uuid: str) -> Dict:
-    """
-    从历史用户轮次中累计“已知需求”
-    """
     history_user_turns = _get_history_user_turns(session_uuid)
 
     memory = {
@@ -324,7 +358,7 @@ def _build_user_memory_profile(session_uuid: str) -> Dict:
         "core_functions": [],
         "scenarios": [],
         "known_slots": [],
-        "last_user_need_summary": "",
+        "summary": "暂无明确历史需求",
     }
 
     for turn in history_user_turns:
@@ -348,7 +382,6 @@ def _build_user_memory_profile(session_uuid: str) -> Dict:
             if s not in memory["scenarios"]:
                 memory["scenarios"].append(s)
 
-        # 再利用 preference_vector 补充
         vec = _safe_json_dict(turn.preference_vector)
         attrs = _safe_json_dict(vec.get("preferred_attributes"))
 
@@ -391,7 +424,8 @@ def _build_user_memory_profile(session_uuid: str) -> Dict:
     if memory["scenarios"]:
         summary_parts.append(f"使用场景：{'、'.join(memory['scenarios'])}")
 
-    memory["last_user_need_summary"] = "；".join(summary_parts) if summary_parts else "暂无明确历史需求"
+    if summary_parts:
+        memory["summary"] = "；".join(summary_parts)
 
     return memory
 
@@ -416,7 +450,6 @@ def _merge_memory_with_current(memory: Dict, current_details: Dict) -> Dict:
         if s not in merged["scenarios"]:
             merged["scenarios"].append(s)
 
-    # 为兼容旧匹配函数保留单值 core_function
     merged["core_function"] = merged["core_functions"][0] if merged["core_functions"] else None
 
     known_slots = []
@@ -449,9 +482,13 @@ def _merge_memory_with_current(memory: Dict, current_details: Dict) -> Dict:
 
 
 # =========================
-# 5. 适应性操控：只问缺失项
+# 5. 适应性操控：缺失追问 + 确认式追问
 # =========================
 def _need_clarification_from_memory(memory_profile: Dict, current_turn: int) -> bool:
+    """
+    只有明显信息不足时才追问
+    降敏：第二轮后不轻易因为单一缺项就再次追问
+    """
     missing = 0
 
     if memory_profile.get("max_price") is None:
@@ -461,11 +498,10 @@ def _need_clarification_from_memory(memory_profile: Dict, current_turn: int) -> 
     if not memory_profile.get("core_functions") and not memory_profile.get("scenarios"):
         missing += 1
 
-    # 第一轮可以更积极追问，后续轮次避免反复问
     if current_turn <= 1:
         return missing >= 2
 
-    return missing >= 2
+    return missing >= 3
 
 
 def _build_targeted_clarifying_question(memory_profile: Dict) -> str:
@@ -474,21 +510,49 @@ def _build_targeted_clarifying_question(memory_profile: Dict) -> str:
     missing_need = (not memory_profile.get("core_functions")) and (not memory_profile.get("scenarios"))
 
     if missing_budget and missing_type:
-        return "我先确认两点，这样能帮你筛得更准：你的预算大概是多少？另外你更偏向头戴式、入耳式还是半入耳式呢？"
+        return "我先确认两点，这样后面推荐会更贴合：你的预算大概是多少？另外你更偏向头戴式、入耳式还是半入耳式呢？"
 
     if missing_budget and missing_need:
         return "我再确认一下，你的预算大概是多少？另外你主要是通勤、运动、游戏还是办公使用，或者最在意降噪、音质、续航中的哪一项呢？"
 
     if missing_budget:
-        return "我再确认一下你的预算大概是多少呢？这样我可以帮你筛得更准一点。"
+        return "我再确认一下你的预算大概是多少呢？这样我可以先帮你排除掉不合适的价格区间。"
 
     if missing_type:
-        return "我再确认一下，你更偏向头戴式、入耳式还是半入耳式呢？"
+        return "我再确认一下，你更偏向头戴式、入耳式还是半入耳式呢？这会直接影响后面推荐方向。"
 
     if missing_need:
-        return "我再确认一下，你主要是通勤、运动、游戏还是办公使用？或者你最在意的是降噪、音质还是续航呢？"
+        return "我再确认一下，你主要是什么场景用，或者最在意的是降噪、音质、续航里的哪一项呢？"
 
     return ""
+
+
+def _need_confirmation_followup(memory_profile: Dict, current_turn: int, stable_counts: Dict) -> bool:
+    """
+    已经有初步需求，但还不够稳定时，在第2-3轮优先做确认式追问
+    """
+    if not (2 <= current_turn <= 3):
+        return False
+
+    detail_count = _count_filled_slots(memory_profile)
+
+    stable_slot_count = sum(1 for v in stable_counts.values() if v >= 2)
+
+    # 有初步轮廓，但稳定性还不足
+    return 2 <= detail_count <= 4 and stable_slot_count < 2
+
+
+def _build_confirmation_followup(memory_profile: Dict) -> str:
+    if memory_profile.get("max_price") is not None and not memory_profile.get("headset_type"):
+        return "你刚刚已经提到预算和使用方向了，我再确认一下：你更偏向头戴式、入耳式还是半入耳式呢？"
+
+    if memory_profile.get("scenarios") and memory_profile.get("core_functions"):
+        return "我大概明白你的方向了。我再确认一个取舍：在你的使用场景下，你会更优先考虑降噪/音质这些核心体验，还是更看重续航和佩戴舒适度呢？"
+
+    if memory_profile.get("brand") is None:
+        return "我再确认一下，你对品牌有没有明显偏好？比如更倾向索尼、Bose、苹果这类，还是更看重性价比？"
+
+    return "我目前已经有一个初步判断了，不过为了推荐更贴合，我再确认一个点：你最不能妥协的那个条件是什么？"
 
 
 # =========================
@@ -505,42 +569,47 @@ def _is_explicit_finish_intent(user_msg: str) -> bool:
     return any(k in text for k in finish_keywords)
 
 
-def _is_need_clear_enough(memory_profile: Dict, current_turn: int, user_msg: str) -> bool:
+def _is_need_clear_enough(memory_profile: Dict, current_turn: int, user_msg: str, stable_counts: Dict) -> bool:
+    """
+    降敏版停止条件：
+    1. 用户明确表示结束/决定 -> 可以停
+    2. 否则至少第3轮以后
+    3. 且信息完整度更高 + 稳定信号足够
+    """
     text = _normalize_text(user_msg)
+
     decision_keywords = [
-        "就买", "下单", "决定", "买这个", "就这个", "链接",
+        "就买", "下单", "决定", "买这个", "就这个",
         "直接买", "可以了", "够了", "不用再推荐"
     ]
 
-    detail_count = 0
-    if memory_profile.get("max_price") is not None:
-        detail_count += 1
-    if memory_profile.get("headset_type"):
-        detail_count += 1
-    if memory_profile.get("brand"):
-        detail_count += 1
-    if memory_profile.get("core_functions"):
-        detail_count += 1
-    if memory_profile.get("scenarios"):
-        detail_count += 1
-
-    if detail_count >= 3:
-        return True
-    if current_turn >= 2 and detail_count >= 2:
-        return True
     if any(k in text for k in decision_keywords):
+        return True
+
+    if current_turn < 3:
+        return False
+
+    detail_count = _count_filled_slots(memory_profile)
+    stable_slot_count = sum(1 for v in stable_counts.values() if v >= 2)
+
+    # 信息够丰富 + 至少有两个槽位在跨轮中重复出现，才认为需求相对稳定
+    if detail_count >= 4 and stable_slot_count >= 2:
         return True
 
     return False
 
 
 def _build_stop_message(memory_profile: Dict) -> str:
-    summary_text = memory_profile.get("summary") or "你的需求"
-    return f"我这边已经基本确认你的需求了：{summary_text}。目前可以先暂停推荐，你可以结束本轮交互并开始答题。"
+    summary_text = memory_profile.get("summary") or "你的需求方向"
+    return (
+        f"我目前已经初步了解你的需求方向：{summary_text}。"
+        f"如果你觉得差不多了，可以结束本轮交互并开始答题；"
+        f"如果你愿意，我也可以继续帮你细化比较。"
+    )
 
 
 # =========================
-# 7. 校准操控：基于合并后的记忆选商品
+# 7. 校准操控：基于合并记忆选商品
 # =========================
 def _safe_filter_products_by_ids(products: List[Dict], allowed_ids: Set[str]) -> List[Dict]:
     if not allowed_ids:
@@ -660,28 +729,39 @@ def get_ai_response(
     adapt_level = (assigned_adaptivity or "HIGH").upper()
     calib_level = (assigned_calibration or "HIGH").upper()
 
-    # 1) 读取涉入度，并过滤商品池
+    # 1) 读取当前session涉入度，并过滤商品池
     all_products = load_products_from_csv()
     involvement = _get_session_involvement(session_uuid)
     all_products = filter_products_by_involvement(all_products, involvement)
 
-    # 2) 识别本轮意图 + 构建会话记忆
+    # 2) 本轮意图 + 历史记忆 + 合并画像
     user_intent = _detect_user_intent(user_msg)
     current_details = _build_intent_details(user_msg)
     history_memory = _build_user_memory_profile(session_uuid)
     merged_profile = _merge_memory_with_current(history_memory, current_details)
+    stable_counts = _count_stable_signals(session_uuid)
 
-    # 3) 停止推荐判断
-    if _is_explicit_finish_intent(user_msg) or _is_need_clear_enough(merged_profile, current_turn, user_msg):
+    # 3) 明确结束指令优先
+    if _is_explicit_finish_intent(user_msg):
         ai_text = _build_stop_message(merged_profile)
         return ai_text, adapt_level, calib_level, []
 
-    # 4) HIGH adaptivity：只问缺失项，不重复问已知信息
+    # 4) HIGH adaptivity：第2-3轮优先做确认式追问，避免过早收口
+    if adapt_level == "HIGH" and _need_confirmation_followup(merged_profile, current_turn, stable_counts):
+        ai_text = _build_confirmation_followup(merged_profile)
+        return ai_text, adapt_level, calib_level, []
+
+    # 5) HIGH adaptivity：只有明显信息不足时才追问缺失项
     if adapt_level == "HIGH" and _need_clarification_from_memory(merged_profile, current_turn):
         ai_text = _build_targeted_clarifying_question(merged_profile)
         return ai_text, adapt_level, calib_level, []
 
-    # 5) 根据历史推荐去重，做校准型选品
+    # 6) 更保守地判断是否可以进入结束阶段
+    if _is_need_clear_enough(merged_profile, current_turn, user_msg, stable_counts):
+        ai_text = _build_stop_message(merged_profile)
+        return ai_text, adapt_level, calib_level, []
+
+    # 7) 做校准型选品
     history_product_ids = _get_history_product_ids(session_uuid)
     selected_products = _select_products_by_calibration(
         all_products=all_products,
@@ -692,12 +772,12 @@ def get_ai_response(
         top_n=5
     )
 
-    # comparison 场景允许带一点最近历史商品做对比上下文
+    # comparison 场景允许加入少量最近历史商品做对比
     if user_intent == "comparison":
         recent_history = _get_recent_history_products(session_uuid, max_n=2)
         selected_products = _dedup_products(recent_history + selected_products, max_n=5)
 
-    # 6) 把“结构化会话记忆”显式传给模型
+    # 8) 调用模型生成回复
     ai_text = call_deepseek_with_products(
         user_msg=user_msg,
         user_intent=user_intent,
@@ -707,7 +787,6 @@ def get_ai_response(
         memory_profile=merged_profile
     )
 
-    # 7) 返回给前端/数据库存储的商品精简字段
     core_products = extract_product_core_info(selected_products[:5])
 
     return ai_text, adapt_level, calib_level, core_products
