@@ -784,9 +784,11 @@ def get_ai_response(
         recommended_products=selected_products,
         adapt_level=adapt_level,
         calib_level=calib_level,
-        memory_profile=merged_profile
+        memory_profile=merged_profile,
+        previous_products=previous_recommended_products
     )
 
     core_products = extract_product_core_info(selected_products[:5])
 
     return ai_text, adapt_level, calib_level, core_products
+
