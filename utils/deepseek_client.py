@@ -58,9 +58,21 @@ def init_deepseek_client():
 client = init_deepseek_client()
 
 
-def _format_product_text(recommended_products: List[Dict]) -> str:
+def _format_product_text(recommended_products: List[Dict], previous_products: Optional[List[Dict]] = None) -> str:
+    text = ""
+    
+    # 新增：注入上一轮记忆
+    if previous_products:
+        prev_lines = []
+        for i, p in enumerate(previous_products, start=1):
+            prev_lines.append(
+                f"{i}. {p.get('product_name', '未知商品')} [{p.get('product_id', 'NO_ID')}]"
+            )
+        text += "【上一轮推荐的商品】（仅供上下文参考，如果用户追问上一轮的商品，请结合此处信息回答）：\n" + "\n".join(prev_lines) + "\n\n"
+
     if not recommended_products:
-        return "当前轮暂无可用候选商品。"
+        text += "【本轮候选商品】：当前轮暂无可用新候选商品。"
+        return text
 
     lines = []
     for i, p in enumerate(recommended_products, start=1):
@@ -73,8 +85,9 @@ def _format_product_text(recommended_products: List[Dict]) -> str:
             f"品牌: {p.get('brand', '无')} | "
             f"适合: {p.get('scenario', '日常')}"
         )
-    return "当前轮允许推荐的全部候选商品如下（只能从中选择，不允许编造列表外商品）：\n" + "\n".join(lines)
-
+    text += "【本轮允许推荐的新候选商品】（若要推荐新商品，必须且只能从这里选择）：\n" + "\n".join(lines)
+    
+    return text
 
 def _format_memory_text(memory_profile: Optional[Dict]) -> str:
     if not memory_profile:
@@ -140,12 +153,12 @@ def call_deepseek_with_products(
     recommended_products: list,
     adapt_level: str,
     calib_level: str,
-    memory_profile: Optional[Dict] = None
+    memory_profile: Optional[Dict] = None,
+    previous_products: Optional[List[Dict]] = None
 ) -> str:
-    product_text = _format_product_text(recommended_products)
+    product_text = _format_product_text(recommended_products, previous_products)
     memory_text = _format_memory_text(memory_profile)
-    system_prompt = _build_system_prompt(adapt_level, calib_level)
-
+    system_prompt = _build_system_prompt(adapt_level, calib_level
     user_prompt = f"""当前用户消息：{user_msg}
 当前用户意图：{user_intent}
 
@@ -178,4 +191,5 @@ def call_deepseek_with_products(
     except Exception as e:
         logger.error(f"DeepSeek API 调用失败：{str(e)}")
         return "抱歉，我暂时无法继续推荐。不过你前面提到的需求我会按原条件理解，你可以稍后再试一次。"
+
 
