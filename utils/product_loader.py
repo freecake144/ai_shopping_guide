@@ -1,23 +1,106 @@
-import pandas as pd
 import os
-import random
-from typing import List, Dict
-import copy
 import re
+import random
+import copy
+from typing import List, Dict, Any
 
-# 配置商品CSV路径
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # 项目根目录
+import pandas as pd
+
+
+# =========================
+# 1. 路径与缓存
+# =========================
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PRODUCT_CSV_PATH = os.path.join(BASE_DIR, "data", "product_list.csv")
 
-# 全局变量：缓存商品数据（避免每次推荐都重新读CSV，提升性能）
 GLOBAL_PRODUCTS: List[Dict] = []
 
-def _normalize_core_function_list(value):
+
+# =========================
+# 2. 基础清洗函数
+# =========================
+def _safe_str(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, float) and pd.isna(value):
+        return ""
+    return str(value).strip()
+
+
+def _safe_lower(value: Any) -> str:
+    return _safe_str(value).lower()
+
+
+def _normalize_price(value: Any) -> float:
     """
-    兼容三种情况：
-    1. 字符串: '降噪，蓝牙，续航'
-    2. 列表: ['降噪', '蓝牙']
-    3. 空值: NaN / None
+    支持:
+    - 299
+    - "299"
+    - "299元"
+    - "¥299"
+    - "299.00"
+    """
+    if value is None:
+        return 0.0
+
+    if isinstance(value, (int, float)) and not pd.isna(value):
+        return float(value)
+
+    text = _safe_str(value)
+    text = text.replace("¥", "").replace("元", "").replace(",", "").strip()
+
+    m = re.search(r"\d+(\.\d+)?", text)
+    if m:
+        try:
+            return float(m.group())
+        except Exception:
+            return 0.0
+    return 0.0
+
+
+def _normalize_sales_volume(value: Any) -> int:
+    """
+    支持:
+    - 5000
+    - "5000+"
+    - "1.2万+"
+    - "300"
+    """
+    if value is None:
+        return 0
+
+    if isinstance(value, (int, float)) and not pd.isna(value):
+        return int(value)
+
+    text = _safe_str(value).lower().replace(",", "")
+    if not text:
+        return 0
+
+    # 处理中文“万”
+    m_wan = re.search(r"(\d+(\.\d+)?)\s*万", text)
+    if m_wan:
+        try:
+            return int(float(m_wan.group(1)) * 10000)
+        except Exception:
+            return 0
+
+    m = re.search(r"\d+", text.replace("+", ""))
+    if m:
+        try:
+            return int(m.group())
+        except Exception:
+            return 0
+
+    return 0
+
+
+def _normalize_core_function_list(value: Any) -> List[str]:
+    """
+    兼容:
+    1. 字符串: "降噪，蓝牙，续航"
+    2. 字符串: "降噪,蓝牙/续航"
+    3. 列表: ["降噪", "蓝牙"]
+    4. 空值: None / NaN
     """
     if value is None or (isinstance(value, float) and pd.isna(value)):
         return []
@@ -28,149 +111,326 @@ def _normalize_core_function_list(value):
             if item is None:
                 continue
             if isinstance(item, str):
-                parts = re.split(r"[，,、/]+", item)
+                parts = re.split(r"[，,、/｜|；;]+", item)
                 result.extend([x.strip() for x in parts if x and x.strip()])
             else:
-                result.append(str(item).strip())
+                item_text = _safe_str(item)
+                if item_text:
+                    result.append(item_text)
         return [x for x in result if x]
 
     if isinstance(value, str):
-        return [x.strip() for x in re.split(r"[，,、/]+", value) if x and x.strip()]
+        return [x.strip() for x in re.split(r"[，,、/｜|；;]+", value) if x and x.strip()]
 
-    return [str(value).strip()] if str(value).strip() else []
+    value_text = _safe_str(value)
+    return [value_text] if value_text else []
 
 
-def load_products_from_csv() -> List[Dict]:
+def _normalize_scenario_list(value: Any) -> List[str]:
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return []
+
+    if isinstance(value, list):
+        result = []
+        for item in value:
+            parts = re.split(r"[，,、/｜|；;]+", _safe_str(item))
+            result.extend([x.strip() for x in parts if x and x.strip()])
+        return result
+
+    text = _safe_str(value)
+    if not text:
+        return []
+    return [x.strip() for x in re.split(r"[，,、/｜|；;]+", text) if x and x.strip()]
+
+
+def _normalize_record(record: Dict) -> Dict:
     """
-    从CSV加载商品数据，转为字典列表（全局缓存，只加载一次）
-    返回：商品字典列表，每个字典对应一条商品数据
+    把每个商品统一成更稳的结构
+    """
+    r = dict(record)
+
+    r["product_id"] = _safe_str(r.get("product_id"))
+    r["product_name"] = _safe_str(r.get("product_name"))
+    r["brand"] = _safe_str(r.get("brand"))
+    r["headset_type"] = _safe_str(r.get("headset_type"))
+    r["core_function"] = _safe_str(r.get("core_function"))
+    r["scenario"] = _safe_str(r.get("scenario"))
+    r["involvement_level"] = _safe_lower(r.get("involvement_level"))
+
+    r["price"] = _normalize_price(r.get("price"))
+    r["sales_volume_num"] = _normalize_sales_volume(r.get("sales_volume"))
+
+    r["core_function_list"] = _normalize_core_function_list(r.get("core_function"))
+    r["scenario_list"] = _normalize_scenario_list(r.get("scenario"))
+
+    return r
+
+
+# =========================
+# 3. 加载 CSV
+# =========================
+def load_products_from_csv(force_reload: bool = False) -> List[Dict]:
+    """
+    从 CSV 加载商品并缓存
     """
     global GLOBAL_PRODUCTS
-    if GLOBAL_PRODUCTS:  # 已缓存，直接返回
+
+    if GLOBAL_PRODUCTS and not force_reload:
         return GLOBAL_PRODUCTS
 
-    # 读取CSV
     try:
-        # CSV编码调整
-        df = pd.read_csv(PRODUCT_CSV_PATH, encoding="UTF-8")
-        # 确保核心字段存在（无则报错，提示用户补充）
+        df = pd.read_csv(PRODUCT_CSV_PATH, encoding="utf-8")
+
         required_fields = [
-            "product_id",  # 商品唯一ID（如EAR001）
-            "product_name",  # 商品名称
-            "price",  # 价格（用于价格敏感匹配）
-            "headset_type",  # 耳机类型（头戴式/入耳式/半入耳式，核心匹配字段）
-            "core_function",  # 核心功能（降噪/无线蓝牙，核心匹配字段）
-            "involvement_level"
+            "product_id",
+            "product_name",
+            "price",
+            "headset_type",
+            "core_function",
+            "involvement_level",
         ]
         missing_fields = [f for f in required_fields if f not in df.columns]
         if missing_fields:
             raise ValueError(f"商品CSV缺少核心字段：{', '.join(missing_fields)}")
 
-        # 处理属性字段（转为纯Python列表，避免数组类型）
-        df["core_function"] = df["core_function"].fillna("").astype(str)  # 空值转为空字符串
-        df["core_function_list"] = df["core_function"].apply(_normalize_core_function_list)
+        # 缺失列兜底，避免下游直接 KeyError
+        optional_defaults = {
+            "brand": "",
+            "scenario": "",
+            "sales_volume": 0,
+            "battery_life(hours)": "",
+        }
+        for col, default_val in optional_defaults.items():
+            if col not in df.columns:
+                df[col] = default_val
 
-        # 转为字典列表（全局缓存）
-        GLOBAL_PRODUCTS = df.to_dict("records")
-        print(f"成功加载商品数据，共{len(GLOBAL_PRODUCTS)}款商品")
+        # 逐行标准化，避免 .str.split / re.split 因 list / NaN 崩掉
+        records = df.to_dict("records")
+        normalized_records = [_normalize_record(r) for r in records]
+
+        # 去掉没有 product_id 的脏数据
+        normalized_records = [r for r in normalized_records if r.get("product_id")]
+
+        GLOBAL_PRODUCTS = normalized_records
+        print(f"成功加载商品数据，共 {len(GLOBAL_PRODUCTS)} 款商品")
+
+        # 调试阶段可临时打开
+        # print([p["core_function"] for p in GLOBAL_PRODUCTS[:5]])
+        # print([p["core_function_list"] for p in GLOBAL_PRODUCTS[:5]])
+
         return GLOBAL_PRODUCTS
+
     except FileNotFoundError:
         raise FileNotFoundError(f"商品CSV文件未找到，请检查路径：{PRODUCT_CSV_PATH}")
     except Exception as e:
         raise Exception(f"加载商品CSV失败：{str(e)}")
 
 
+# =========================
+# 4. 匹配工具
+# =========================
+def _match_headset_type(product: Dict, headset_type: str) -> bool:
+    if not headset_type:
+        return True
+    return _safe_str(product.get("headset_type")) == _safe_str(headset_type)
+
+
+def _match_brand(product: Dict, brand: str) -> bool:
+    if not brand:
+        return True
+    return _safe_str(product.get("brand")).lower() == _safe_str(brand).lower()
+
+
+def _match_core_function(product: Dict, required_func: str) -> bool:
+    if not required_func:
+        return True
+
+    required = _safe_str(required_func)
+    funcs = product.get("core_function_list", [])
+    funcs = funcs if isinstance(funcs, list) else []
+
+    # 先做精确匹配
+    if required in funcs:
+        return True
+
+    # 再做包含匹配，兼容“无线蓝牙”“蓝牙”“降噪麦克风”这类近似表述
+    required_lower = required.lower()
+    for f in funcs:
+        f_lower = _safe_str(f).lower()
+        if required_lower in f_lower or f_lower in required_lower:
+            return True
+
+    return False
+
+
+def _match_price(product: Dict, max_price: Any) -> bool:
+    if max_price is None:
+        return True
+    try:
+        return float(product.get("price", 0)) <= float(max_price)
+    except Exception:
+        return False
+
+
+def _sort_by_price_asc(products: List[Dict]) -> List[Dict]:
+    return sorted(products, key=lambda x: float(x.get("price", 0)))
+
+
+def _sort_by_sales_desc(products: List[Dict]) -> List[Dict]:
+    return sorted(products, key=lambda x: int(x.get("sales_volume_num", 0)), reverse=True)
+
+
+# =========================
+# 5. 推荐主逻辑
+# =========================
 def get_matching_products(user_intent: str, intent_details: Dict, top_n: int = 3) -> List[Dict]:
     """
-    高校准推荐（HIGH校准）：根据耳机用户意图匹配商品
-    参数：
-        user_intent: 用户意图（如"price_sensitive"、"recommendation"）
-        intent_details: 意图详情（如{"max_price": 500, "headset_type": "入耳式"}）
-        top_n: 推荐商品数量
-    返回：匹配的商品列表
+    HIGH 校准：基于意图和条件做规则筛选
     """
     products = load_products_from_csv()
     matched = copy.deepcopy(products)
 
-    # 1. 价格敏感意图（匹配预算+可选属性）
+    max_price = intent_details.get("max_price")
+    headset_type = intent_details.get("headset_type")
+    core_function = intent_details.get("core_function")
+    brand = intent_details.get("brand")
+
+    # 1) 价格敏感
     if user_intent == "price_sensitive":
-        max_price = intent_details.get("max_price", 500)
-        # 若用户同时指定了耳机类型/功能，叠加筛选
-        matched = [p for p in products if float(p["price"]) <= max_price]
-        if "headset_type" in intent_details:
-            matched = [p for p in matched if p["headset_type"] == intent_details["headset_type"]]
-        if "core_function" in intent_details:
-            required_func = intent_details["core_function"]
-            matched = [p for p in matched if required_func in p["core_function_list"]]
+        matched = [p for p in matched if _match_price(p, max_price)]
+        matched = [p for p in matched if _match_headset_type(p, headset_type)]
+        matched = [p for p in matched if _match_core_function(p, core_function)]
+        matched = [p for p in matched if _match_brand(p, brand)]
 
-    # 2. 直接推荐意图（匹配耳机类型/功能/品牌）
+        # 更适合先按价格升序，再看销量
+        matched = sorted(
+            matched,
+            key=lambda x: (float(x.get("price", 0)), -int(x.get("sales_volume_num", 0)))
+        )
+
+    # 2) 常规推荐
     elif user_intent == "recommendation":
-        matched = products
-        # 筛选耳机类型
-        if "headset_type" in intent_details:
-            matched = [p for p in matched if p["headset_type"] == intent_details["headset_type"]]
-        # 筛选核心功能（如降噪）
-        if "core_function" in intent_details:
-            required_func = intent_details["core_function"]
-            matched = [p for p in matched if required_func in p["core_function_list"]]
-        # 筛选品牌
-        if "brand" in intent_details:
-            matched = [p for p in matched if p["brand"] == intent_details["brand"]]
+        matched = [p for p in matched if _match_headset_type(p, headset_type)]
+        matched = [p for p in matched if _match_core_function(p, core_function)]
+        matched = [p for p in matched if _match_brand(p, brand)]
 
-    # 3. 对比意图（匹配同类型不同品牌）
+        # 如果一个条件都没给，就按销量走
+        if not any([headset_type, core_function, brand, max_price]):
+            matched = _sort_by_sales_desc(matched)
+        else:
+            matched = sorted(
+                matched,
+                key=lambda x: (
+                    0 if _match_brand(x, brand) else 1,
+                    0 if _match_headset_type(x, headset_type) else 1,
+                    0 if _match_core_function(x, core_function) else 1,
+                    -int(x.get("sales_volume_num", 0))
+                )
+            )
+
+        # 若给了预算，再做一个软过滤
+        if max_price is not None:
+            budget_matched = [p for p in matched if _match_price(p, max_price)]
+            if budget_matched:
+                matched = budget_matched
+
+    # 3) 对比
     elif user_intent == "comparison":
-        headset_type = intent_details.get("headset_type", "入耳式")
-        matched = [p for p in matched if p["headset_type"] == headset_type]
-        # 筛选不同品牌的同类型耳机
-        brands = list(set([p["brand"] for p in matched]))[:top_n*2]  # 取前6个品牌
-        matched = [p for p in matched if p["brand"] in brands]
+        # 优先同类型；若无则不过滤类型
+        if headset_type:
+            type_matched = [p for p in matched if _match_headset_type(p, headset_type)]
+            if type_matched:
+                matched = type_matched
 
-    # 4. 探索意图（高销量优先）
+        if core_function:
+            func_matched = [p for p in matched if _match_core_function(p, core_function)]
+            if func_matched:
+                matched = func_matched
+
+        # 如果指定品牌，优先这些品牌；否则保留多品牌
+        if brand:
+            brand_matched = [p for p in matched if _match_brand(p, brand)]
+            if brand_matched:
+                matched = brand_matched
+
+        # 选不同品牌更利于对比
+        matched = _sort_by_sales_desc(matched)
+        dedup_brands = []
+        seen_brands = set()
+        for p in matched:
+            b = _safe_str(p.get("brand"))
+            if b not in seen_brands:
+                dedup_brands.append(p)
+                seen_brands.add(b)
+        matched = dedup_brands
+
+    # 4) 探索
     elif user_intent == "exploration":
-        # 按销量排序（处理"5000+"这种字符串，提取数字）
-        def get_sales_num(sales_str):
-            return int(sales_str.replace("+", "")) if isinstance(sales_str, str) else sales_str
-        matched = sorted(products, key=lambda x: get_sales_num(x["sales_volume"]), reverse=True)
+        matched = _sort_by_sales_desc(matched)
 
-    # 取前N款，不足则随机兜底
-    result = matched[:top_n] if matched else get_matching_products("exploration", {}, top_n)
-    return result
+    else:
+        matched = _sort_by_sales_desc(matched)
 
-# 商品转自然语言
-def render_product_text(products):
+    # 兜底：没匹配到时不要递归自己，直接随机
+    if not matched:
+        return get_random_products(top_n=top_n)
+
+    return matched[:top_n]
+
+
+def render_product_text(products: List[Dict]) -> str:
     lines = []
     for p in products:
         line = (
-            f"- {p['product_name']}｜¥{p['price']}｜{p['headset_type']}｜"
-            f"{p['core_function']}｜适合场景：{p['scenario']}"
+            f"- {p.get('product_name', '未知商品')}｜"
+            f"¥{p.get('price', '未知')}｜"
+            f"{p.get('headset_type', '无类型')}｜"
+            f"{p.get('core_function', '无功能')}｜"
+            f"适合场景：{p.get('scenario', '日常')}"
         )
         lines.append(line)
     return "\n".join(lines)
 
+
 def get_random_products(top_n: int = 3) -> List[Dict]:
-    """低校准推荐：随机推荐商品（确保打乱顺序）"""
-    products = load_products_from_csv()
-    random.shuffle(products)  # 关键：打乱商品列表顺序
+    """
+    LOW 校准：随机推荐
+    """
+    products = copy.deepcopy(load_products_from_csv())
+    random.shuffle(products)
     return products[:top_n]
 
-# 根据涉入度过滤商品
-def filter_products_by_involvement(products: List[Dict], level: str) -> List[Dict]:
-    """过滤高/低涉入度商品"""
-    return [p for p in products if p.get('involvement_level') == level]
 
-# 提取推荐商品的核心信息（减少数据库存储冗余）
+def filter_products_by_involvement(products: List[Dict], level: str) -> List[Dict]:
+    """
+    根据涉入度过滤
+    如果 level 无效或过滤后为空，则回退到原列表
+    """
+    level = _safe_lower(level)
+    if not level:
+        return products
+
+    filtered = [p for p in products if _safe_lower(p.get("involvement_level")) == level]
+    return filtered if filtered else products
+
+
 def extract_product_core_info(products: List[Dict]) -> List[Dict]:
     """
-    提取商品的核心字段（用于存入数据库，避免存储冗余数据）
-    返回：仅包含核心字段的商品字典列表
+    精简存库字段
     """
-    core_fields = ["product_id", "product_name", "price", "headset_type","core_function", "brand","battery_life(hours)","sales_volume","involvement_level"]
+    core_fields = [
+        "product_id",
+        "product_name",
+        "price",
+        "headset_type",
+        "core_function",
+        "brand",
+        "battery_life(hours)",
+        "sales_volume",
+        "involvement_level",
+        "scenario",
+    ]
     return [
-        {field: product[field] for field in core_fields if field in product}
+        {field: product.get(field) for field in core_fields if field in product}
         for product in products
     ]
-
-
-
-
-
