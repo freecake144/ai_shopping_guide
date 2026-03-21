@@ -180,6 +180,9 @@ def load_products_from_csv(force_reload: bool = False) -> List[Dict]:
 
     try:
         df = pd.read_csv(PRODUCT_CSV_PATH, encoding="utf-8")
+        df['core_function'] = df['core_function'].str.replace('，', ',')
+        df['price_band'] = df['price_band'].map(lambda x: PRICE_BAND_MAP.get(str(x).strip(), "low"))
+        df['involvement_level'] = df['involvement_level'].str.strip().str.lower()
 
         required_fields = [
             "product_id",
@@ -283,12 +286,11 @@ def _sort_by_sales_desc(products: List[Dict]) -> List[Dict]:
 # =========================
 # 5. 推荐主逻辑
 # =========================
-def get_matching_products(user_intent: str, intent_details: Dict, top_n: int = 3) -> List[Dict]:
+def get_matching_products(pool: List[Dict], user_intent: str, max_price: float = None, **kwargs) -> List[Dict]:
     """
     HIGH 校准：基于意图和条件做规则筛选
     """
-    products = load_products_from_csv()
-    matched = copy.deepcopy(products)
+    matched = pool
 
     max_price = intent_details.get("max_price")
     headset_type = intent_details.get("headset_type")
@@ -302,11 +304,18 @@ def get_matching_products(user_intent: str, intent_details: Dict, top_n: int = 3
         matched = [p for p in matched if _match_core_function(p, core_function)]
         matched = [p for p in matched if _match_brand(p, brand)]
 
-        # 更适合先按价格升序，再看销量
-        matched = sorted(
-            matched,
-            key=lambda x: (float(x.get("price", 0)), -int(x.get("sales_volume_num", 0)))
-        )
+        if max_price is not None:
+            # 如果有明确预算，按“贴近预算（差值绝对值最小）”排序，而不是最便宜的
+            matched = sorted(
+                matched,
+                key=lambda x: (abs(max_price - float(x.get("price", 0))), -int(x.get("sales_volume_num", 0)))
+            )
+        else:
+            # 如果没说具体预算，纯喊便宜，才按从低到高排
+            matched = sorted(
+                matched,
+                key=lambda x: (float(x.get("price", 0)), -int(x.get("sales_volume_num", 0)))
+            )
 
     # 2) 常规推荐
     elif user_intent == "recommendation":
@@ -392,13 +401,13 @@ def render_product_text(products: List[Dict]) -> str:
     return "\n".join(lines)
 
 
-def get_random_products(top_n: int = 3) -> List[Dict]:
+def get_random_products(pool: List[Dict], top_n: int = 3) -> List[Dict]:
     """
     LOW 校准：随机推荐
     """
-    products = copy.deepcopy(load_products_from_csv())
-    random.shuffle(products)
-    return products[:top_n]
+    temp_pool=copy.deepcopy(pool)
+    random.shuffle(temp_pool)
+    return temp_pool[:top_n]
 
 
 def filter_products_by_involvement(products: List[Dict], level: str) -> List[Dict]:
